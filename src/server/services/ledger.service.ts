@@ -9,6 +9,8 @@ import type {
   BetId,
 } from '../../shared/types/entities.js';
 import { LedgerRepository } from '../repositories/ledger.repository.js';
+import { LeaderboardRepository } from '../repositories/leaderboard.repository.js';
+import { DEFAULT_LEADERBOARD_WINDOWS } from '../config/constants.js';
 import { createLedgerEntryId } from '../utils/id.js';
 import { nowIso } from '../utils/time.js';
 
@@ -25,9 +27,14 @@ interface LedgerEntryOptions {
 
 export class LedgerService {
   private readonly repository: LedgerRepository;
+  private readonly leaderboards: LeaderboardRepository;
 
-  constructor(repository = new LedgerRepository()) {
+  constructor(
+    repository = new LedgerRepository(),
+    leaderboards = new LeaderboardRepository(),
+  ) {
     this.repository = repository;
+    this.leaderboards = leaderboards;
   }
 
   async record(tx: TxClientLike, options: LedgerEntryOptions): Promise<LedgerEntry> {
@@ -51,6 +58,34 @@ export class LedgerService {
     const entry: LedgerEntry = base;
 
     await this.repository.create(tx, entry);
+    await this.updateLeaderboards(tx, entry);
     return entry;
+  }
+
+  private async updateLeaderboards(tx: TxClientLike, entry: LedgerEntry): Promise<void> {
+    const amount = this.resolveLeaderboardDelta(entry.type, entry.delta);
+    if (amount <= 0) {
+      return;
+    }
+
+    await Promise.all(
+      DEFAULT_LEADERBOARD_WINDOWS.map((window) =>
+        this.leaderboards.increment(tx, entry.subredditId, window, entry.userId, amount, {
+          delta: amount,
+        }),
+      ),
+    );
+  }
+
+  private resolveLeaderboardDelta(type: LedgerEntryType, delta: Points): Points {
+    switch (type) {
+      case 'credit':
+      case 'payout':
+      case 'refund':
+      case 'adjustment':
+        return delta;
+      default:
+        return 0 as Points;
+    }
   }
 }

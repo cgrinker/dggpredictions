@@ -160,4 +160,6 @@ Devvit Settings (per installation)
 - ✅ Config caching implemented with TTL-backed snapshots and validation against shared schemas.
 - ✅ Market repository enforces status index maintenance and user bet pointer writes; bet repository now maintains per-user all/active indexes plus listing helpers powering wallet and history endpoints.
 - ✅ Balance/ledger helpers support atomic credit/debit workflows and ledger entry creation.
-- 🔄 Settlement/refund flows, archival policies, and scheduler coordination still pending.
+- ✅ Ledger service now pushes positive ledger deltas into weekly/monthly/all-time leaderboard sorted sets.
+- ✅ Settlement and refund flows now run inside Redis transactions, updating balances, ledger entries, and clearing user pointers, with leaderboard resets intentionally left for manual moderation actions.
+- 🔄 Archival policies and scheduler coordination still pending.

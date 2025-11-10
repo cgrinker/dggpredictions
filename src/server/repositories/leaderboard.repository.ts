@@ -1,5 +1,5 @@
-import type { Points, SubredditId, UserId } from '../../shared/types/entities.js';
-import type { LeaderboardEntry } from '../../shared/types/entities.js';
+import type { TxClientLike } from '@devvit/redis';
+import type { LeaderboardEntry, Points, SubredditId, UserId } from '../../shared/types/entities.js';
 import type { LeaderboardWindow } from '../config/constants.js';
 import { redisClient } from '../redis-client.js';
 import { leaderboardKeys } from '../utils/redis-keys.js';
@@ -27,6 +27,32 @@ const parseMeta = (raw: string | null | undefined): LeaderboardMeta => {
   }
 };
 
+const serializeMeta = (meta: LeaderboardMeta | undefined): string | null => {
+  if (!meta) {
+    return null;
+  }
+
+  const payload: Record<string, unknown> = {};
+
+  if (meta.username) {
+    payload.username = meta.username;
+  }
+
+  if (typeof meta.delta === 'number' && meta.delta >= 0) {
+    payload.delta = Math.trunc(meta.delta);
+  }
+
+  if (Object.keys(payload).length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return null;
+  }
+};
+
 const toPoints = (value: number | string | null | undefined): Points => {
   const numeric = typeof value === 'string' ? Number.parseFloat(value) : value;
   if (typeof numeric === 'number' && Number.isFinite(numeric)) {
@@ -36,6 +62,30 @@ const toPoints = (value: number | string | null | undefined): Points => {
 };
 
 export class LeaderboardRepository {
+  async increment(
+    tx: TxClientLike,
+    subredditId: SubredditId,
+    window: LeaderboardWindow,
+    userId: UserId,
+    amount: Points,
+    metadata?: LeaderboardMeta,
+  ): Promise<void> {
+    const incrementBy = Math.trunc(amount);
+    if (incrementBy <= 0) {
+      return;
+    }
+
+    const key = leaderboardKeys.window(subredditId, window);
+    const metaKey = leaderboardKeys.windowMeta(subredditId, window);
+
+    await tx.zIncrBy(key, userId, incrementBy);
+
+    const serializedMeta = serializeMeta(metadata);
+    if (serializedMeta) {
+      await tx.hSet(metaKey, { [userId]: serializedMeta });
+    }
+  }
+
   async list(
     subredditId: SubredditId,
     window: LeaderboardWindow,

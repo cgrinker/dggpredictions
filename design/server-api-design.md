@@ -156,6 +156,8 @@ Errors raised by services should include machine-readable `code` (e.g., `MARKET_
 - ✅ Service layer beginnings implemented: `ConfigService`, `MarketsService`, `BetsService`, and `LedgerService` orchestrate config reads, bet placement validation, and ledger writes.
 - ✅ Repositories for markets, bets, balances, ledger, and config created under `src/server/repositories`, providing typed Redis accessors used by services.
 - ✅ Shared logging, tracing, context hydration, and error mapping middleware wired into the Express router for consistent request handling.
-- ✅ Market and user controllers now live, exposing `/api/markets/*`, `/api/users/me/balance`, and `/api/users/me/bets` endpoints backed by the services.
+- ✅ Market, user, and leaderboard controllers now live, exposing `/api/markets/*`, `/api/users/me/balance`, `/api/users/me/bets`, and `/api/leaderboard` endpoints backed by the services.
 - ✅ Bet placement flow now enforces wager rules, single active bet per market, and creates ledger entries via transactional helper.
-- 🔄 Moderator/leaderboard controllers plus scheduler-triggered handlers remain to be implemented.
+- ✅ Ledger service now rolls positive ledger deltas into leaderboard sorted sets to keep standings fresh.
+- ✅ Moderator resolve/void endpoints now execute settlement payouts/refunds via transactional helpers while leaving leaderboard resets as a manual process.
+- 🔄 Moderator-focused controllers plus scheduler-triggered handlers remain to be implemented.

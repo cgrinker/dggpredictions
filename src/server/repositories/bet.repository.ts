@@ -13,7 +13,12 @@ export class BetRepository {
   }
 
   async countActiveByUser(subredditId: SubredditId, userId: UserId): Promise<number> {
-    const key = userKeys.betsIndex(subredditId, userId);
+    const key = userKeys.betsActive(subredditId, userId);
+    return redisClient.zCard(key);
+  }
+
+  async countAllByUser(subredditId: SubredditId, userId: UserId): Promise<number> {
+    const key = userKeys.betsAll(subredditId, userId);
     return redisClient.zCard(key);
   }
 
@@ -25,10 +30,12 @@ export class BetRepository {
   ): Promise<void> {
     const betKey = betKeys.record(subredditId, bet.id);
     const betIndex = marketKeys.betsIndex(subredditId, marketId);
-    const userIndex = userKeys.betsIndex(subredditId, bet.userId);
+    const userAllIndex = userKeys.betsAll(subredditId, bet.userId);
+    const userActiveIndex = userKeys.betsActive(subredditId, bet.userId);
     await tx.hSet(betKey, serializeBet(bet));
     await tx.zAdd(betIndex, { score: toEpochMillis(bet.createdAt), member: bet.id });
-    await tx.zAdd(userIndex, { score: toEpochMillis(bet.createdAt), member: bet.id });
+    await tx.zAdd(userAllIndex, { score: toEpochMillis(bet.createdAt), member: bet.id });
+    await tx.zAdd(userActiveIndex, { score: toEpochMillis(bet.createdAt), member: bet.id });
   }
 
   async update(
@@ -41,8 +48,59 @@ export class BetRepository {
     await tx.hSet(betKey, serializeBet(updated));
 
     if (previous.status === 'active' && updated.status !== 'active') {
-      const userIndex = userKeys.betsIndex(subredditId, updated.userId);
-      await tx.zRem(userIndex, [updated.id]);
+      const userActiveIndex = userKeys.betsActive(subredditId, updated.userId);
+      await tx.zRem(userActiveIndex, [updated.id]);
     }
+
+    if (previous.status !== 'active' && updated.status === 'active') {
+      const userActiveIndex = userKeys.betsActive(subredditId, updated.userId);
+      await tx.zAdd(userActiveIndex, { score: toEpochMillis(updated.createdAt), member: updated.id });
+    }
+  }
+
+  async listByUser(
+    subredditId: SubredditId,
+    userId: UserId,
+    options?: { readonly offset?: number; readonly limit?: number; readonly status?: Bet['status'] },
+  ): Promise<Bet[]> {
+    const index = userKeys.betsAll(subredditId, userId);
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? 50;
+    const start = offset;
+    const stop = offset + limit - 1;
+
+    const members = await redisClient.zRange(index, start, stop, { by: 'rank' });
+    if (members.length === 0) {
+      return [];
+    }
+
+    const bets = await Promise.all(
+      members
+        .map(({ member }) => member)
+        .map(async (betId) => this.getById(subredditId, betId as BetId)),
+    );
+
+    const filtered = bets.filter((bet): bet is Bet => bet !== null);
+    if (options?.status) {
+      return filtered.filter((bet) => bet.status === options.status);
+    }
+
+    return filtered;
+  }
+
+  async listByMarket(subredditId: SubredditId, marketId: MarketId): Promise<Bet[]> {
+    const index = marketKeys.betsIndex(subredditId, marketId);
+    const members = await redisClient.zRange(index, 0, -1, { by: 'rank' });
+    if (members.length === 0) {
+      return [];
+    }
+
+    const bets = await Promise.all(
+      members
+        .map(({ member }) => member)
+        .map(async (betId) => this.getById(subredditId, betId as BetId)),
+    );
+
+    return bets.filter((bet): bet is Bet => bet !== null);
   }
 }

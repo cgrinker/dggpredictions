@@ -22,7 +22,13 @@ const balanceRepository = new BalanceRepository();
 const ledgerService = new LedgerService();
 const leaderboardRepository = new LeaderboardRepository();
 
-const marketsService = new MarketsService(marketRepository, betRepository, configService);
+const marketsService = new MarketsService(
+  marketRepository,
+  betRepository,
+  balanceRepository,
+  ledgerService,
+  configService,
+);
 const betsService = new BetsService(
   marketRepository,
   betRepository,

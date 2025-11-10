@@ -11,14 +11,16 @@ export interface RequestContext {
   readonly config: AppConfig | null;
 }
 
-export const buildRequestContext = async (configProvider: () => Promise<AppConfig | null>) => {
+export const buildRequestContext = async (
+  configProvider: (subredditId: SubredditId) => Promise<AppConfig | null>,
+) => {
   const subredditId = devvitContext.subredditId as SubredditId;
   const subredditName = devvitContext.subredditName ?? 'unknown-subreddit';
   const userId = (devvitContext.userId ?? null) as UserId | null;
   const contextAny = devvitContext as Partial<{ isModerator: boolean }>;
   const username = (await reddit.getCurrentUsername()) ?? null;
   const isModerator = Boolean(contextAny.isModerator);
-  const config = await configProvider();
+  const config = await configProvider(subredditId);
 
   const context: RequestContext = {
     subredditId,

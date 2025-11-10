@@ -1,5 +1,6 @@
 export type ErrorCode =
   | 'VALIDATION'
+  | 'UNAUTHORIZED'
   | 'FORBIDDEN'
   | 'NOT_FOUND'
   | 'CONFLICT'
@@ -28,6 +29,12 @@ export class AppError extends Error {
 export class ValidationError extends AppError {
   constructor(message: string, options?: ErrorOptions) {
     super(message, 'VALIDATION', 400, options);
+  }
+}
+
+export class UnauthorizedError extends AppError {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, 'UNAUTHORIZED', 401, options);
   }
 }
 

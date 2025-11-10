@@ -144,6 +144,16 @@ export class MarketRepository {
     await tx.set(pointerKey, betId, { nx: true });
   }
 
+  async clearUserBetPointer(
+    tx: TxClientLike,
+    subredditId: SubredditId,
+    marketId: MarketId,
+    userId: UserId,
+  ): Promise<void> {
+    const pointerKey = marketKeys.userPointer(subredditId, marketId, userId);
+    await tx.del(pointerKey);
+  }
+
   async applyUpdate(
     tx: TxClientLike,
     subredditId: SubredditId,

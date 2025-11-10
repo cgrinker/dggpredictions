@@ -1,13 +1,21 @@
 import type { TxClientLike, RedisClient } from '@devvit/redis';
 import type {
   Bet,
+  BetStatus,
   Market,
   Points,
   SubredditId,
   UserBalance,
   UserId,
 } from '../../shared/types/entities.js';
-import type { PlaceBetRequest, PlaceBetResponse, WalletSnapshot } from '../../shared/types/dto.js';
+import type {
+  BetSummary,
+  PaginatedResponse,
+  PlaceBetRequest,
+  PlaceBetResponse,
+  WalletSnapshot,
+} from '../../shared/types/dto.js';
+import type { AppConfig } from '../../shared/types/config.js';
 import { MarketRepository } from '../repositories/market.repository.js';
 import { BetRepository } from '../repositories/bet.repository.js';
 import { BalanceRepository } from '../repositories/balance.repository.js';
@@ -66,20 +74,7 @@ export class BetsService {
       throw new NotFoundError(`Market ${request.marketId} not found.`);
     }
 
-    let balance = await this.balances.get(subredditId, userId);
-    if (!balance) {
-      balance = await this.balances.create({
-        schemaVersion: 1,
-        userId,
-        subredditId,
-        balance: config.startingBalance,
-        lifetimeEarned: 0,
-        lifetimeLost: 0,
-        weeklyEarned: 0,
-        monthlyEarned: 0,
-        updatedAt: nowIso(),
-      });
-    }
+    await this.ensureBalanceRecord(subredditId, userId, config);
 
     const balanceKey = balanceKeys.record(subredditId, userId);
     const marketKey = marketKeys.record(subredditId, request.marketId);
@@ -104,6 +99,59 @@ export class BetsService {
       balance: walletSnapshot,
       market: marketDetail,
     } satisfies PlaceBetResponse;
+  }
+
+  async getWallet(subredditId: SubredditId, userId: UserId): Promise<WalletSnapshot> {
+    const balance = await this.ensureBalanceRecord(subredditId, userId);
+    const activeBets = await this.bets.countActiveByUser(subredditId, userId);
+    return this.toWalletSnapshot(balance, activeBets);
+  }
+
+  async listUserBets(
+    subredditId: SubredditId,
+    userId: UserId,
+    options?: {
+      status?: BetStatus;
+      page?: number;
+      pageSize?: number;
+    },
+  ): Promise<PaginatedResponse<BetSummary>> {
+    const page = Math.max(1, options?.page ?? 1);
+    const pageSize = Math.min(Math.max(1, options?.pageSize ?? 25), 100);
+    const totalBets = await this.bets.countAllByUser(subredditId, userId);
+
+    if (totalBets === 0) {
+      return {
+        data: [],
+        pagination: { page, pageSize, total: 0 },
+      } satisfies PaginatedResponse<BetSummary>;
+    }
+
+    const allBets = await this.bets.listByUser(subredditId, userId, {
+      offset: 0,
+      limit: totalBets,
+    });
+
+    const sorted = [...allBets].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const statusFilter = options?.status;
+    const filtered = statusFilter ? sorted.filter((bet) => bet.status === statusFilter) : sorted;
+    const total = filtered.length;
+
+    if (total === 0) {
+      return {
+        data: [],
+        pagination: { page, pageSize, total: 0 },
+      } satisfies PaginatedResponse<BetSummary>;
+    }
+
+    const offset = (page - 1) * pageSize;
+    const paged = filtered.slice(offset, offset + pageSize);
+    const summaries = await Promise.all(paged.map((bet) => this.buildBetSummary(subredditId, bet)));
+
+    return {
+      data: summaries,
+      pagination: { page, pageSize, total },
+    } satisfies PaginatedResponse<BetSummary>;
   }
 
   private async executeBetPlacement(
@@ -148,7 +196,7 @@ export class BetsService {
     await this.bets.create(tx, subredditId, request.marketId, bet);
     await this.markets.setUserBetPointer(tx, subredditId, request.marketId, userId, bet.id);
     await this.markets.applyUpdate(tx, subredditId, state.market, updatedMarket);
-  await this.balances.applySnapshot(tx, updatedBalance);
+    await this.balances.applySnapshot(tx, updatedBalance);
     await this.ledger.record(tx, {
       subredditId,
       userId,
@@ -238,5 +286,48 @@ export class BetsService {
     if (maxBet !== null && wager > maxBet) {
       throw new ValidationError(`Maximum bet is ${maxBet}.`);
     }
+  }
+
+  private async ensureBalanceRecord(
+    subredditId: SubredditId,
+    userId: UserId,
+    config?: AppConfig,
+  ): Promise<UserBalance> {
+    const existing = await this.balances.get(subredditId, userId);
+    if (existing) {
+      return existing;
+    }
+
+    const resolvedConfig = config ?? (await this.config.getConfig(subredditId));
+    const snapshot: UserBalance = {
+      schemaVersion: 1,
+      userId,
+      subredditId,
+      balance: resolvedConfig.startingBalance,
+      lifetimeEarned: 0,
+      lifetimeLost: 0,
+      weeklyEarned: 0,
+      monthlyEarned: 0,
+      updatedAt: nowIso(),
+    } satisfies UserBalance;
+
+    return this.balances.create(snapshot);
+  }
+
+  private async buildBetSummary(subredditId: SubredditId, bet: Bet): Promise<BetSummary> {
+    const market = await this.markets.getById(subredditId, bet.marketId);
+
+    return {
+      id: bet.id,
+      marketId: bet.marketId,
+      side: bet.side,
+      wager: bet.wager,
+      status: bet.status,
+      createdAt: bet.createdAt,
+      payout: bet.payout,
+      settledAt: bet.settledAt,
+      marketTitle: market?.title ?? 'Unknown Market',
+      marketStatus: market?.status ?? 'void',
+    } satisfies BetSummary;
   }
 }
