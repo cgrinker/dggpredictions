@@ -153,3 +153,11 @@ Devvit Settings (per installation)
 - Config cache module handling Devvit Settings reads/writes.
 - Transaction helper utilities with logging/instrumentation.
 - Tests covering bet placement, resolution, refund flows, leaderboard updates, and scheduler job scheduling/cancellation.
+
+## Implementation Progress (Nov 10, 2025)
+- ✅ Redis repositories landed under `src/server/repositories` for markets, bets, balances, ledger entries, and config caching.
+- ✅ Transaction + Redis key utilities created in `src/server/utils`, aligning with planned retry/backoff patterns.
+- ✅ Config caching implemented with TTL-backed snapshots and validation against shared schemas.
+- ✅ Market repository enforces status index maintenance and user bet pointer writes; bet repository tracks per-user active bets.
+- ✅ Balance/ledger helpers support atomic credit/debit workflows and ledger entry creation.
+- 🔄 Settlement/refund flows, archival policies, and scheduler coordination still pending.

@@ -151,3 +151,10 @@ Errors raised by services should include machine-readable `code` (e.g., `MARKET_
 - Middleware pipeline implemented with Zod validation and correlation IDs.
 - Controller/service/repository skeletons with TODOs referencing persistence functions.
 - Automated tests covering core flows.
+
+## Implementation Progress (Nov 10, 2025)
+- ✅ Service layer beginnings implemented: `ConfigService`, `MarketsService`, `BetsService`, and `LedgerService` orchestrate config reads, bet placement validation, and ledger writes.
+- ✅ Repositories for markets, bets, balances, ledger, and config created under `src/server/repositories`, providing typed Redis accessors used by services.
+- ✅ Shared logging/error/context utilities added to support consistent handler wiring once controllers are introduced.
+- ✅ Bet placement flow now enforces wager rules, single active bet per market, and creates ledger entries via transactional helper.
+- 🔄 HTTP controllers, middleware, and scheduler handlers still to be scaffolded per route catalog.
