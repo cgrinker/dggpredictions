@@ -40,11 +40,14 @@ export const ledgerKeys = {
 };
 
 export const userKeys = {
-  betsIndex: (subredditId: SubredditId, userId: UserId) => base('user', subredditId, userId, 'bets'),
+  betsAll: (subredditId: SubredditId, userId: UserId) => base('user', subredditId, userId, 'bets', 'all'),
+  betsActive: (subredditId: SubredditId, userId: UserId) => base('user', subredditId, userId, 'bets', 'active'),
 };
 
 export const leaderboardKeys = {
   window: (subredditId: SubredditId, window: string) => base('leaderboard', subredditId, window),
+  windowMeta: (subredditId: SubredditId, window: string) =>
+    base('leaderboard', subredditId, window, 'meta'),
 };
 
 export const configKeys = {
