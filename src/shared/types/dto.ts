@@ -1,0 +1,112 @@
+import type {
+  Bet,
+  BetSide,
+  LeaderboardEntry,
+  Market,
+  MarketId,
+  MarketStatus,
+  Points,
+  SubredditId,
+  UserBalance,
+  UserId,
+} from './entities.js';
+
+export interface Pagination {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly total: number;
+}
+
+export interface PaginatedResponse<T> {
+  readonly data: readonly T[];
+  readonly pagination: Pagination;
+}
+
+export interface MarketSummary extends Pick<Market, 'id' | 'title' | 'status' | 'closesAt' | 'potYes' | 'potNo' | 'totalBets'> {
+  readonly impliedYesPayout: number;
+  readonly impliedNoPayout: number;
+}
+
+export interface MarketDetail extends Market {
+  readonly userBet: Bet | null;
+}
+
+export interface BetSummary extends Pick<Bet, 'id' | 'marketId' | 'side' | 'wager' | 'status' | 'createdAt' | 'payout' | 'settledAt'> {
+  readonly marketTitle: string;
+  readonly marketStatus: MarketStatus;
+}
+
+export interface WalletSnapshot extends Pick<UserBalance, 'userId' | 'subredditId' | 'balance' | 'lifetimeEarned' | 'lifetimeLost' | 'weeklyEarned' | 'monthlyEarned' | 'updatedAt'> {
+  readonly activeBets: number;
+}
+
+export interface PlaceBetRequest {
+  readonly marketId: MarketId;
+  readonly side: BetSide;
+  readonly wager: Points;
+}
+
+export interface PlaceBetResponse {
+  readonly bet: Bet;
+  readonly balance: WalletSnapshot;
+  readonly market: MarketDetail;
+}
+
+export interface CreateMarketRequest {
+  readonly title: string;
+  readonly description: string;
+  readonly closesAt: string;
+  readonly tags?: readonly string[];
+}
+
+export interface MarketStateChangeRequest {
+  readonly marketId: MarketId;
+}
+
+export interface PublishMarketRequest extends MarketStateChangeRequest {
+  readonly autoCloseOverrideMinutes?: number;
+}
+
+export interface ResolveMarketRequest extends MarketStateChangeRequest {
+  readonly resolution: BetSide;
+  readonly notes?: string;
+}
+
+export interface VoidMarketRequest extends MarketStateChangeRequest {
+  readonly reason: string;
+}
+
+export interface AdjustBalanceRequest {
+  readonly targetUserId: UserId;
+  readonly subredditId: SubredditId;
+  readonly delta: Points;
+  readonly reasonCode: 'DISPUTE_REFUND' | 'BUG_FIX' | 'MOD_REWARD' | 'OTHER';
+  readonly memo?: string;
+}
+
+export interface LeaderboardResponse {
+  readonly window: 'weekly' | 'monthly' | 'alltime';
+  readonly asOf: string;
+  readonly entries: readonly LeaderboardEntry[];
+  readonly currentUser?: LeaderboardEntry;
+}
+
+export interface ApiSuccessEnvelope<T> {
+  readonly data: T;
+  readonly meta?: Record<string, unknown>;
+}
+
+export interface ApiErrorEnvelope {
+  readonly error: {
+    readonly code: string;
+    readonly message: string;
+    readonly details?: Record<string, unknown>;
+  };
+}
+
+export type PlaceBetResponseEnvelope = ApiSuccessEnvelope<PlaceBetResponse>;
+export type MarketListResponse = ApiSuccessEnvelope<PaginatedResponse<MarketSummary>>;
+export type MarketDetailResponse = ApiSuccessEnvelope<MarketDetail>;
+export type WalletResponse = ApiSuccessEnvelope<WalletSnapshot>;
+export type UserBetsResponse = ApiSuccessEnvelope<PaginatedResponse<BetSummary>>;
+export type LeaderboardResponseEnvelope = ApiSuccessEnvelope<LeaderboardResponse>;
