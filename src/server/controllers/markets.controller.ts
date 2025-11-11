@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { MarketId } from '../../shared/types/entities.js';
+import type { CreateMarketRequest } from '../../shared/types/dto.js';
 import {
   MarketIdSchema,
   MarketStatusSchema,
@@ -12,6 +13,7 @@ import {
   ResolveMarketRequestSchema,
   VoidMarketRequestSchema,
   ArchiveMarketsRequestSchema,
+  CreateMarketRequestSchema,
 } from '../../shared/schema/dto.schema.js';
 import { ensureValid } from '../../shared/validation.js';
 import { MarketsService } from '../services/markets.service.js';
@@ -117,6 +119,39 @@ export const registerMarketRoutes = (
       });
 
       res.json({ data: response });
+    }),
+  );
+
+  router.post(
+    ['/internal/markets', '/api/internal/markets'],
+    requireModerator,
+    asyncHandler(async (req, res) => {
+      const context = req.appContext;
+      if (!context || !context.userId) {
+        throw new ValidationError('Request context unavailable.');
+      }
+
+      const payload = ensureValid(
+        CreateMarketRequestSchema,
+        typeof req.body === 'object' && req.body !== null ? req.body : {},
+        'Invalid market creation payload.',
+      );
+
+      const requestBody: CreateMarketRequest = {
+        title: payload.title,
+        description: payload.description,
+        closesAt: payload.closesAt,
+        ...(payload.tags ? { tags: payload.tags as readonly string[] } : {}),
+      };
+
+      const market = await dependencies.marketsService.createDraft(
+        context.subredditId,
+        context.userId,
+        requestBody,
+        { creatorUsername: context.username },
+      );
+
+      res.status(201).json({ data: market });
     }),
   );
 

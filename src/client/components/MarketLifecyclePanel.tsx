@@ -7,6 +7,7 @@ import { useMarkets } from '../hooks/useMarkets.js';
 import { useAuditLog } from '../hooks/useAuditLog.js';
 import { formatDateTime, formatPoints } from '../utils/format.js';
 import { ManualAdjustmentPanel } from './ManualAdjustmentPanel.js';
+import { CreateMarketPanel } from './CreateMarketPanel.js';
 
 interface FeedbackState {
   readonly type: 'success' | 'error';
@@ -286,6 +287,8 @@ export const MarketLifecyclePanel = () => {
           Failed to load moderator data. Try refreshing or check moderator permissions.
         </div>
       )}
+
+      <CreateMarketPanel onCreated={refreshAll} />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-xl font-semibold text-gray-900">Draft Markets</h2>

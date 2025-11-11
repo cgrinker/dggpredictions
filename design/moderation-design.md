@@ -131,8 +131,8 @@
 - Persistence keys for `ModeratorAction` implemented.
 - Tests verifying audit trail integrity and moderator flows.
 
-## Implementation Progress (Nov 11, 2025)
-- ✅ Moderator lifecycle console covers publish, close, resolve, and void flows with UI wiring to the refreshed API layer.
+- ✅ Moderator lifecycle console covers draft creation, publish, close, resolve, and void flows with UI wiring to the refreshed API layer.
 - ✅ Archive maintenance endpoint is live server-side with schema validation and controller tests, paving the way for console tooling.
 - ✅ Manual balance adjustments now flow through a dedicated service with ledger entries, audit snapshots, and a moderator UI form requiring confirmation safeguards.
+- ✅ End-to-end moderator workflow validated: moderators seed drafts, publish markets, resolve outcomes, and audit logs capture each privileged action.
 - 🔄 Next up: expose archival controls and dry-run reporting in the moderator console and broaden audit log surfacing for maintenance actions.

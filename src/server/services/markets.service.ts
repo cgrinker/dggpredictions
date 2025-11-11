@@ -172,6 +172,7 @@ export class MarketsService {
     subredditId: SubredditId,
     creatorId: UserId,
     payload: CreateMarketRequest,
+    options?: { readonly creatorUsername?: string | null },
   ): Promise<Market> {
     this.ensureCloseTimeIsValid(payload.closesAt);
     const config = await this.config.getConfig(subredditId);
@@ -208,6 +209,18 @@ export class MarketsService {
     const market: Market = base;
 
     await this.markets.create(subredditId, market);
+
+    await this.recordMarketAction(subredditId, {
+      moderatorId: creatorId,
+      moderatorUsername: options?.creatorUsername ?? null,
+      action: 'CREATE_MARKET',
+      marketId: market.id,
+      payload: {
+        title: payload.title,
+        closesAt: payload.closesAt,
+        tags: payload.tags ?? [],
+      },
+    });
     return market;
   }
 

@@ -8,7 +8,7 @@ import { errorHandler } from '../../middleware/error-handler.js';
 import type { RequestContext } from '../../context.js';
 import type { MarketsService } from '../../services/markets.service.js';
 import type { BetsService } from '../../services/bets.service.js';
-import type { SubredditId, UserId } from '../../../shared/types/entities.js';
+import type { Market, SubredditId, UserId } from '../../../shared/types/entities.js';
 
 type VitestMock = ReturnType<typeof vi.fn>;
 
@@ -45,6 +45,7 @@ const createApp = (
 
 const createDependencies = () => {
   const marketsService: Partial<MarketsService> = {
+    createDraft: vi.fn(),
     archiveMarkets: vi.fn(),
   };
 
@@ -122,5 +123,73 @@ describe('MarketsController archive route', () => {
     expect(response.body.error.code).toBe('VALIDATION_FAILED');
     expect(Array.isArray(response.body.error.details?.issues)).toBe(true);
     expect(marketsService.archiveMarkets).not.toHaveBeenCalled();
+  });
+});
+
+describe('MarketsController create route', () => {
+  it('creates draft market with moderator context', async () => {
+    const createdMarket: Market = {
+      schemaVersion: 1,
+      id: 'market-123' as Market['id'],
+      subredditId: defaultContext.subredditId,
+      title: 'Test Market',
+      description: 'Description',
+      createdBy: defaultContext.userId!,
+      createdAt: new Date().toISOString(),
+      closesAt: new Date(Date.now() + 60_000).toISOString(),
+      resolvedAt: null,
+      status: 'draft',
+      resolution: null,
+      potYes: 0,
+      potNo: 0,
+      totalBets: 0,
+    };
+
+    const { dependencies, marketsService } = createDependencies();
+    (marketsService.createDraft as VitestMock).mockResolvedValue(createdMarket);
+
+    const app = createApp(dependencies, {});
+    const agent: SuperTest<SupertestRequest> = supertest(app);
+
+    const payload = {
+      title: 'Test Market',
+      description: 'Description',
+      closesAt: createdMarket.closesAt,
+      tags: ['tag1', 'tag2'],
+    };
+
+    const response = await agent.post('/internal/markets').send(payload).expect(201);
+
+    expect(response.body.data).toEqual(createdMarket);
+    expect(marketsService.createDraft).toHaveBeenCalledTimes(1);
+    const [subredditId, moderatorId, requestBody, options] = (
+      marketsService.createDraft as VitestMock
+    ).mock.calls[0] as Parameters<MarketsService['createDraft']>;
+    expect(subredditId).toBe(defaultContext.subredditId);
+    expect(moderatorId).toBe(defaultContext.userId);
+    expect(requestBody).toMatchObject({
+      title: payload.title,
+      description: payload.description,
+      closesAt: payload.closesAt,
+      tags: payload.tags,
+    });
+    expect(options).toEqual({ creatorUsername: defaultContext.username });
+  });
+
+  it('rejects creation when request context missing user', async () => {
+    const { dependencies, marketsService } = createDependencies();
+    const app = createApp(dependencies, { userId: null });
+    const agent: SuperTest<SupertestRequest> = supertest(app);
+
+    await agent
+      .post('/internal/markets')
+      .send({
+        title: 'Test',
+        description: 'Desc',
+        closesAt: new Date(Date.now() + 60_000).toISOString(),
+      })
+      .expect(400);
+
+    expect(marketsService.createDraft).not.toHaveBeenCalled();
   });
 });

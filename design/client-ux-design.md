@@ -179,8 +179,8 @@ src/client/
 - Localization support (i18n) once required.
 - Dark mode theme depending on Reddit client settings (if accessible via Devvit). 
 
-## Implementation Progress (Nov 11, 2025)
 - ✅ Participant experiences (Markets lobby, Market detail with bet slip, Wallet, Bets, Leaderboard) are implemented and wired to live hooks/APIs with optimistic updates where appropriate.
-- ✅ Moderator lifecycle console (`MarketLifecyclePanel`) now includes an integrated audit log viewer, publish/close/resolve/void controls, and the manual balance adjustment form with dual-confirmation safeguards.
-- ✅ Client API and hook layers cover markets, bets, wallet, leaderboard, audit log flows, and moderator balance adjustments with consistent error handling utilities.
+- ✅ Moderator lifecycle console (`MarketLifecyclePanel`) now includes draft creation, publish/close/resolve/void controls, an integrated audit log viewer, and the manual balance adjustment form with dual-confirmation safeguards.
+- ✅ Client API and hook layers cover markets, bets, wallet, leaderboard, audit log flows, moderator balance adjustments, and draft creation with consistent error handling utilities.
+- ✅ Manual playtest validated: moderator creates/publishes markets, participants place opposing bets, and settlements pay winners while debiting losers.
 - 🔄 Moderator-only extensions (archival tooling, config editing) and richer observability affordances are scheduled for upcoming work.

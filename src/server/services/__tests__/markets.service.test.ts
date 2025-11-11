@@ -116,6 +116,91 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe('MarketsService createDraft', () => {
+  it('creates draft market and records audit entry', async () => {
+    const marketsRepo: Partial<MarketRepository> = {
+      list: vi.fn().mockResolvedValue({ markets: [], total: 0 }),
+      create: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const auditService: Partial<AuditLogService> = {
+      recordAction: vi.fn().mockResolvedValue({
+        schemaVersion: 1,
+        id: 'audit-123' as ModeratorActionId,
+        subredditId: 'sub-1' as SubredditId,
+        performedBy: 'mod-1' as UserId,
+        performedByUsername: 'mod-user',
+        action: 'CREATE_MARKET',
+        marketId: 'market-1' as MarketId,
+        targetUserId: null,
+        payload: {},
+        createdAt: new Date().toISOString(),
+      }),
+    };
+
+    const baseConfig: AppConfig = {
+      startingBalance: 1_000,
+      minBet: 1,
+      maxBet: null,
+      maxOpenMarkets: null,
+      leaderboardWindow: 'weekly',
+      autoCloseGraceMinutes: 5,
+      featureFlags: {
+        maintenanceMode: false,
+        enableRealtimeUpdates: true,
+        enableLeaderboard: true,
+      },
+    };
+
+    const configService: Partial<ConfigService> = {
+      getConfig: vi.fn().mockResolvedValue(baseConfig),
+    };
+
+    const service = new MarketsServiceClass(
+      marketsRepo as MarketRepository,
+      {} as BetRepository,
+      {} as BalanceRepository,
+      {} as LedgerService,
+      {} as SchedulerService,
+      configService as ConfigService,
+      auditService as AuditLogService,
+    );
+
+    const closesAt = new Date(Date.now() + 60_000).toISOString();
+    const result = await service.createDraft(
+      'sub-1' as SubredditId,
+      'mod-1' as UserId,
+      {
+        title: 'Example Market',
+        description: 'Sample description',
+        closesAt,
+        tags: ['tag1', 'tag2'],
+      },
+      { creatorUsername: 'mod-user' },
+    );
+
+    expect(result.status).toBe('draft');
+    expect(result.title).toBe('Example Market');
+    expect(marketsRepo.create).toHaveBeenCalledTimes(1);
+    expect(marketsRepo.create).toHaveBeenCalledWith(
+      'sub-1',
+      expect.objectContaining({ title: 'Example Market', status: 'draft' }),
+    );
+
+    expect(auditService.recordAction).toHaveBeenCalledWith('sub-1', {
+      performedBy: 'mod-1',
+      performedByUsername: 'mod-user',
+      action: 'CREATE_MARKET',
+      marketId: result.id,
+      payload: {
+        title: 'Example Market',
+        closesAt,
+        tags: ['tag1', 'tag2'],
+      },
+    });
+  });
+});
+
 const setupService = (options?: {
   marketOverrides?: Partial<Market>;
   configOverrides?: Partial<AppConfig>;

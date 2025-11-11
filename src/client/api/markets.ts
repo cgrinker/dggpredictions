@@ -2,7 +2,6 @@ import type {
   ApiSuccessEnvelope,
   MarketSummary,
   PaginatedResponse,
-  PublishMarketRequest,
   MarketListResponse,
   MarketDetailResponse,
   MarketDetail,
@@ -12,6 +11,7 @@ import type {
   ResolveMarketRequest,
   MarketSettlementMeta,
   ResolveMarketResponseEnvelope,
+  CreateMarketRequest,
 } from '../../shared/types/dto.js';
 import type { Market } from '../../shared/types/entities.js';
 import { apiFetch, type ApiError } from './client.js';
@@ -45,22 +45,30 @@ export const getMarkets = async (options: {
   return envelope.data;
 };
 
+export const createMarket = async (payload: CreateMarketRequest): Promise<Market> => {
+  const envelope = await apiFetch<ApiSuccessEnvelope<Market>>('/api/internal/markets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+
+  return envelope.data;
+};
+
 export const publishMarket = async (
   marketId: string,
   options: { readonly autoCloseOverrideMinutes?: number | null } = {},
 ): Promise<ApiSuccessEnvelope<unknown>['data']> => {
-  const body: PublishMarketRequest = {
-    marketId: marketId as PublishMarketRequest['marketId'],
-    ...(Object.prototype.hasOwnProperty.call(options, 'autoCloseOverrideMinutes')
-      ? { autoCloseOverrideMinutes: options.autoCloseOverrideMinutes ?? null }
-      : {}),
-  };
-
   const envelope = await apiFetch<ApiSuccessEnvelope<unknown>>(
     `/api/internal/markets/${marketId}/publish`,
     {
       method: 'POST',
-      body: JSON.stringify(body),
+      ...(Object.prototype.hasOwnProperty.call(options, 'autoCloseOverrideMinutes')
+        ? {
+            body: JSON.stringify({
+              autoCloseOverrideMinutes: options.autoCloseOverrideMinutes ?? null,
+            }),
+          }
+        : {}),
     },
   );
 
@@ -87,11 +95,12 @@ export const getMarketDetail = async (marketId: string): Promise<MarketDetail> =
 };
 
 export const placeBet = async (request: PlaceBetRequest): Promise<PlaceBetResponse> => {
+  const { marketId, ...payload } = request;
   const envelope = await apiFetch<PlaceBetResponseEnvelope>(
-    `/api/markets/${request.marketId}/bets`,
+    `/api/markets/${marketId}/bets`,
     {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify(payload),
     },
   );
 
