@@ -4,6 +4,7 @@ import type {
   Bet,
   Market,
   MarketId,
+  MarketStatus,
   Points,
   SubredditId,
   UserBalance,
@@ -26,10 +27,20 @@ vi.mock('../../utils/transactions.js', () => ({
 }));
 
 let MarketsServiceClass: typeof import('../markets.service.js').MarketsService;
-let settlementState: {
+type SettlementState = {
   market: Market;
   bets: Bet[];
   balances: Map<UserId, UserBalance>;
+};
+
+let settlementState: SettlementState;
+
+const updateSettlementState = (next: Partial<SettlementState>) => {
+  settlementState = {
+    market: next.market ?? settlementState!.market,
+    bets: next.bets ?? settlementState!.bets,
+    balances: next.balances ?? settlementState!.balances,
+  } satisfies SettlementState;
 };
 
 const createMarket = (overrides: Partial<Market> = {}): Market => ({
@@ -80,20 +91,37 @@ const createBalance = (userId: UserId, overrides: Partial<UserBalance> = {}): Us
 
 beforeAll(async () => {
   ({ MarketsService: MarketsServiceClass } = await import('../markets.service.js'));
+
+  runTransactionMock.mockImplementation(async (_keys: unknown, handler: unknown) => {
+    const txStub = {
+      hSet: vi.fn().mockResolvedValue(undefined),
+      zAdd: vi.fn().mockResolvedValue(undefined),
+      zRem: vi.fn().mockResolvedValue(undefined),
+      set: vi.fn().mockResolvedValue(undefined),
+      del: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const handlerFn = handler as (
+      tx: typeof txStub,
+      state: typeof settlementState,
+    ) => Promise<unknown>;
+
+    return handlerFn(txStub, settlementState);
+  });
 });
 
 beforeEach(() => {
-  runTransactionMock.mockImplementation(async (_keys: unknown, handler: unknown) => {
-    const handlerFn = handler as (tx: unknown, state: typeof settlementState) => Promise<unknown>;
-    return handlerFn({} as Record<string, never>, settlementState);
-  });
-  runTransactionMock.mockClear();
+  vi.clearAllMocks();
 });
 
 const setupService = (options?: {
   marketOverrides?: Partial<Market>;
   configOverrides?: Partial<AppConfig>;
   schedulerOverrides?: Partial<SchedulerService>;
+  marketRepoOverrides?: Partial<MarketRepository>;
+  betRepoOverrides?: Partial<BetRepository>;
+  balanceRepoOverrides?: Partial<BalanceRepository>;
+  ledgerOverrides?: Partial<LedgerService>;
 }) => {
   const market = createMarket(options?.marketOverrides ?? {});
   const yesBet = createBet({ side: 'yes' });
@@ -101,14 +129,16 @@ const setupService = (options?: {
 
   const marketRepo: Partial<MarketRepository> = {
     getById: vi.fn().mockResolvedValue(market),
+    list: vi.fn().mockResolvedValue({ markets: [], total: 0 }),
+    save: vi.fn().mockImplementation(async (_subredditId: SubredditId, candidate: Market) => candidate),
     applyUpdate: vi.fn().mockResolvedValue(undefined),
     clearUserBetPointer: vi.fn().mockResolvedValue(undefined),
-    save: vi.fn().mockImplementation(async (_subredditId: SubredditId, candidate: Market) => candidate),
   };
 
   const betRepo: Partial<BetRepository> = {
     listByMarket: vi.fn().mockResolvedValue([yesBet, noBet]),
     update: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
   };
 
   const balanceRepo: Partial<BalanceRepository> = {
@@ -144,6 +174,10 @@ const setupService = (options?: {
   };
 
   Object.assign(schedulerService, options?.schedulerOverrides);
+  Object.assign(marketRepo, options?.marketRepoOverrides);
+  Object.assign(betRepo, options?.betRepoOverrides);
+  Object.assign(balanceRepo, options?.balanceRepoOverrides);
+  Object.assign(ledgerService, options?.ledgerOverrides);
 
   const service = new MarketsServiceClass(
     marketRepo as MarketRepository,
@@ -377,5 +411,226 @@ describe('MarketsService lifecycle', () => {
     expect(result.reason).toBe('not_found');
     expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
     expect(marketRepo.save).not.toHaveBeenCalled();
+  });
+});
+
+describe('MarketsService archive', () => {
+  const subredditId = 'sub-1' as SubredditId;
+  const moderatorId = 'mod-archive' as UserId;
+
+  it('archives eligible markets before cutoff', async () => {
+    const cutoff = new Date('2024-02-01T00:00:00.000Z');
+    const settledAt = '2024-01-01T00:00:00.000Z';
+
+    const archivable = createMarket({
+      id: 'market-archivable' as MarketId,
+      status: 'resolved',
+      resolvedAt: settledAt,
+      metadata: { lastSettledAt: settledAt },
+    });
+
+    const recent = createMarket({
+      id: 'market-recent' as MarketId,
+      status: 'resolved',
+      resolvedAt: '2024-03-01T00:00:00.000Z',
+      metadata: { lastSettledAt: '2024-03-01T00:00:00.000Z' },
+    });
+
+    const alreadyArchived = createMarket({
+      id: 'market-archived' as MarketId,
+      status: 'resolved',
+      resolvedAt: settledAt,
+      metadata: {
+        archivedAt: '2024-01-15T00:00:00.000Z',
+        lastSettledAt: settledAt,
+      },
+    });
+
+    const marketsByStatus: Record<MarketStatus, Market[]> = {
+      draft: [],
+      open: [],
+      closed: [],
+      resolved: [archivable, recent, alreadyArchived],
+      void: [],
+    };
+
+    const marketsById = new Map<MarketId, Market>([
+      [archivable.id, archivable],
+      [recent.id, recent],
+      [alreadyArchived.id, alreadyArchived],
+    ]);
+
+    const betsForArchivable = [
+      createBet({
+        id: 'bet-a' as Bet['id'],
+        marketId: archivable.id,
+        userId: 'user-arch-1' as UserId,
+        side: 'yes',
+      }),
+      createBet({
+        id: 'bet-b' as Bet['id'],
+        marketId: archivable.id,
+        userId: 'user-arch-2' as UserId,
+        side: 'no',
+      }),
+    ];
+
+    const betsByMarket = new Map<MarketId, Bet[]>([[archivable.id, betsForArchivable]]);
+
+    const { service, marketRepo, betRepo } = setupService({
+      marketRepoOverrides: {
+        list: vi
+          .fn()
+          .mockImplementation(async (_sid: SubredditId, opts?: { status?: MarketStatus }) => {
+            const status = opts?.status ?? 'resolved';
+            const markets = marketsByStatus[status] ?? [];
+            return { markets, total: markets.length };
+          }),
+      },
+      betRepoOverrides: {
+        listByMarket: vi
+          .fn()
+          .mockImplementation(async (_sid: SubredditId, marketId: MarketId) => {
+            const market = marketsById.get(marketId);
+            if (market) {
+              updateSettlementState({ market, bets: betsByMarket.get(marketId) ?? [] });
+            }
+            return betsByMarket.get(marketId) ?? [];
+          }),
+        delete: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    const result = await service.archiveMarkets(subredditId, {
+      cutoff,
+      statuses: ['resolved'],
+      moderatorId,
+    });
+
+    expect(result.archivedMarkets).toBe(1);
+    expect(result.skippedMarkets).toBe(2);
+    expect(result.processedMarkets).toBe(3);
+    expect(result.dryRun).toBe(false);
+
+    expect((betRepo.listByMarket as VitestMock)).toHaveBeenCalledTimes(1);
+    expect((betRepo.delete as VitestMock)).toHaveBeenCalledTimes(betsForArchivable.length);
+
+    const updatedMarket = (marketRepo.applyUpdate as VitestMock).mock.calls[0][3] as Market;
+    expect(updatedMarket.metadata?.archivedBy).toBe(moderatorId);
+    expect(updatedMarket.metadata?.archivedBetCount).toBe(betsForArchivable.length);
+    expect(typeof updatedMarket.metadata?.archivedAt).toBe('string');
+
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('supports dry-run without mutating data', async () => {
+    const cutoff = new Date('2024-02-01T00:00:00.000Z');
+
+    const archivable = createMarket({
+      id: 'market-dry-run' as MarketId,
+      status: 'void',
+      metadata: { lastSettledAt: '2024-01-01T00:00:00.000Z' },
+    });
+
+    const { service, marketRepo, betRepo } = setupService({
+      marketRepoOverrides: {
+        list: vi.fn().mockResolvedValue({ markets: [archivable], total: 1 }),
+      },
+      betRepoOverrides: {
+        listByMarket: vi.fn(),
+        delete: vi.fn(),
+      },
+    });
+
+    const result = await service.archiveMarkets(subredditId, {
+      cutoff,
+      statuses: ['void'],
+      moderatorId,
+      dryRun: true,
+    });
+
+    expect(result.archivedMarkets).toBe(1);
+    expect(result.skippedMarkets).toBe(0);
+    expect(result.processedMarkets).toBe(1);
+    expect(result.dryRun).toBe(true);
+
+    expect(betRepo.listByMarket).not.toHaveBeenCalled();
+    expect(betRepo.delete).not.toHaveBeenCalled();
+    expect(marketRepo.applyUpdate).not.toHaveBeenCalled();
+    expect(runTransactionMock).not.toHaveBeenCalled();
+  });
+
+  it('obeys maxMarkets across statuses', async () => {
+    const cutoff = new Date('2024-02-01T00:00:00.000Z');
+
+    const resolvedMarket = createMarket({
+      id: 'market-resolved' as MarketId,
+      status: 'resolved',
+      resolvedAt: '2024-01-01T00:00:00.000Z',
+      metadata: { lastSettledAt: '2024-01-01T00:00:00.000Z' },
+    });
+
+    const voidMarket = createMarket({
+      id: 'market-void' as MarketId,
+      status: 'void',
+      metadata: { lastSettledAt: '2024-01-01T00:00:00.000Z' },
+    });
+
+    const marketsByStatus: Record<MarketStatus, Market[]> = {
+      draft: [],
+      open: [],
+      closed: [],
+      resolved: [resolvedMarket],
+      void: [voidMarket],
+    };
+
+    const betsByMarket = new Map<MarketId, Bet[]>([
+      [resolvedMarket.id, [createBet({ marketId: resolvedMarket.id })]],
+      [voidMarket.id, [createBet({ marketId: voidMarket.id })]],
+    ]);
+
+    const { service, marketRepo, betRepo } = setupService({
+      marketRepoOverrides: {
+        list: vi
+          .fn()
+          .mockImplementation(async (_sid: SubredditId, opts?: { status?: MarketStatus }) => {
+            const status = opts?.status ?? 'resolved';
+            const markets = marketsByStatus[status] ?? [];
+            return { markets, total: markets.length };
+          }),
+      },
+      betRepoOverrides: {
+        listByMarket: vi
+          .fn()
+          .mockImplementation(async (_sid: SubredditId, marketId: MarketId) => {
+            const bets = betsByMarket.get(marketId) ?? [];
+            const market = marketsByStatus.resolved
+              .concat(marketsByStatus.void)
+              .find((candidate) => candidate.id === marketId);
+            if (market) {
+              updateSettlementState({ market, bets });
+            }
+            return bets;
+          }),
+        delete: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    const result = await service.archiveMarkets(subredditId, {
+      cutoff,
+      moderatorId,
+      maxMarkets: 1,
+    });
+
+    expect(result.archivedMarkets).toBe(1);
+    expect(result.processedMarkets).toBe(1);
+    expect(result.skippedMarkets).toBe(0);
+
+    const statusesQueried = (marketRepo.list as VitestMock).mock.calls.map(([, opts]) => opts?.status);
+    expect(statusesQueried).toEqual(['resolved']);
+
+    expect((betRepo.listByMarket as VitestMock)).toHaveBeenCalledTimes(1);
+    expect((betRepo.delete as VitestMock)).toHaveBeenCalledTimes(1);
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
   });
 });

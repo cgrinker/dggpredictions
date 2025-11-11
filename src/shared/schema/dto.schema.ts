@@ -41,6 +41,7 @@ export const MarketSummarySchema = z
     totalBets: z.number().int().min(0),
     impliedYesPayout: z.number().positive(),
     impliedNoPayout: z.number().positive(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
 
@@ -117,6 +118,17 @@ export const PublishMarketRequestSchema = MarketStateChangeRequestSchema.extend(
     .nullable()
     .optional(),
 });
+
+const ArchivableStatuses = z.enum(['closed', 'resolved', 'void']);
+
+export const ArchiveMarketsRequestSchema = z
+  .object({
+    olderThanDays: z.number().int().min(1).max(365),
+    statuses: z.array(ArchivableStatuses).min(1).optional(),
+    maxMarkets: z.number().int().min(1).max(5_000).optional(),
+    dryRun: z.boolean().optional(),
+  })
+  .strict();
 
 export const ResolveMarketRequestSchema = MarketStateChangeRequestSchema.extend({
   resolution: BetSideSchema,

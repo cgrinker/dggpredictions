@@ -58,6 +58,21 @@ export class BetRepository {
     }
   }
 
+  async delete(tx: TxClientLike, subredditId: SubredditId, bet: Bet): Promise<void> {
+    const betKey = betKeys.record(subredditId, bet.id);
+    const marketIndex = marketKeys.betsIndex(subredditId, bet.marketId);
+    const userAllIndex = userKeys.betsAll(subredditId, bet.userId);
+    const userActiveIndex = userKeys.betsActive(subredditId, bet.userId);
+
+    await tx.del(betKey);
+    await tx.zRem(marketIndex, [bet.id]);
+    await tx.zRem(userAllIndex, [bet.id]);
+
+    if (bet.status === 'active') {
+      await tx.zRem(userActiveIndex, [bet.id]);
+    }
+  }
+
   async listByUser(
     subredditId: SubredditId,
     userId: UserId,

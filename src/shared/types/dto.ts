@@ -22,9 +22,11 @@ export interface PaginatedResponse<T> {
   readonly pagination: Pagination;
 }
 
-export interface MarketSummary extends Pick<Market, 'id' | 'title' | 'status' | 'closesAt' | 'potYes' | 'potNo' | 'totalBets'> {
+export interface MarketSummary
+  extends Pick<Market, 'id' | 'title' | 'status' | 'closesAt' | 'potYes' | 'potNo' | 'totalBets'> {
   readonly impliedYesPayout: number;
   readonly impliedNoPayout: number;
+  readonly metadata?: Market['metadata'];
 }
 
 export interface MarketDetail extends Market {
@@ -65,6 +67,21 @@ export interface MarketStateChangeRequest {
 
 export interface PublishMarketRequest extends MarketStateChangeRequest {
   readonly autoCloseOverrideMinutes?: number | null;
+}
+
+export interface ArchiveMarketsRequest {
+  readonly olderThanDays: number;
+  readonly statuses?: ReadonlyArray<MarketStatus>;
+  readonly maxMarkets?: number;
+  readonly dryRun?: boolean;
+}
+
+export interface ArchiveMarketsResponse {
+  readonly processedMarkets: number;
+  readonly archivedMarkets: number;
+  readonly skippedMarkets: number;
+  readonly cutoffIso: string;
+  readonly dryRun: boolean;
 }
 
 export interface ResolveMarketRequest extends MarketStateChangeRequest {
@@ -110,3 +127,4 @@ export type MarketDetailResponse = ApiSuccessEnvelope<MarketDetail>;
 export type WalletResponse = ApiSuccessEnvelope<WalletSnapshot>;
 export type UserBetsResponse = ApiSuccessEnvelope<PaginatedResponse<BetSummary>>;
 export type LeaderboardResponseEnvelope = ApiSuccessEnvelope<LeaderboardResponse>;
+export type ArchiveMarketsResponseEnvelope = ApiSuccessEnvelope<ArchiveMarketsResponse>;

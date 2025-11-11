@@ -162,4 +162,5 @@ Devvit Settings (per installation)
 - ✅ Settlement/refund flows execute within transactions, clearing pointers and updating ledger plus leaderboard state under unit coverage.
 - ✅ Scheduler repository/service manage market-close jobs and now integrate with MarketsService to clean persistence when jobs fire.
 - ✅ Market metadata schema expanded to track publish/close actors, overrides, and scheduler-driven closures for future archival policies.
-- 🔄 Next up: define archival pruning strategies and moderator workflow tooling that leverage the enriched metadata.
+- ✅ Archive pathway removes settled markets via transactional bet deletion, pointer cleanup, and metadata stamping, with repository/service helpers now exercised by tests.
+- 🔄 Next up: automate retention scheduling, expose archival metrics, and explore long-term export options for deep history.

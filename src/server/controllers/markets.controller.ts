@@ -11,6 +11,7 @@ import {
   PublishMarketRequestSchema,
   ResolveMarketRequestSchema,
   VoidMarketRequestSchema,
+  ArchiveMarketsRequestSchema,
 } from '../../shared/schema/dto.schema.js';
 import { ensureValid } from '../../shared/validation.js';
 import { MarketsService } from '../services/markets.service.js';
@@ -228,6 +229,35 @@ export const registerMarketRoutes = (
       );
 
       res.json({ data: result.market, meta: { settlement: result.totals } });
+    }),
+  );
+
+  router.post(
+    '/internal/markets/archive',
+    requireModerator,
+    asyncHandler(async (req, res) => {
+      const context = req.appContext;
+      if (!context) {
+        throw new ValidationError('Request context unavailable.');
+      }
+
+      const body = ensureValid(
+        ArchiveMarketsRequestSchema,
+        typeof req.body === 'object' && req.body !== null ? req.body : {},
+        'Invalid archive payload.',
+      );
+
+      const cutoff = new Date(Date.now() - body.olderThanDays * 86_400_000);
+
+      const result = await dependencies.marketsService.archiveMarkets(context.subredditId, {
+        cutoff,
+        statuses: body.statuses,
+        maxMarkets: body.maxMarkets,
+        dryRun: body.dryRun,
+        moderatorId: context.userId ?? null,
+      });
+
+      res.json({ data: result });
     }),
   );
 

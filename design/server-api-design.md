@@ -161,4 +161,5 @@ Errors raised by services should include machine-readable `code` (e.g., `MARKET_
 - ✅ Markets service now orchestrates publish/close lifecycle end-to-end, including scheduler job scheduling, cancellation, and auto-close metadata cleanup.
 - ✅ Moderator publish/close endpoints plus the `/internal/scheduler/market-close` handler are live, invoking the enhanced service methods and logging skipped jobs.
 - ✅ Lifecycle test suite expanded to cover publish, manual close, scheduler auto-close, and override handling.
-- 🔄 Remaining work: surface lifecycle controls in the client/admin UI, implement archival policies, flesh out moderator workflow tooling, and deepen observability hooks.
+- ✅ Archive tooling in `MarketsService` and `/internal/markets/archive` now prunes aged resolved/void markets with transactional cleanup, surfaced through new service and controller tests.
+- 🔄 Remaining work: wire archival maintenance into the moderator console, expand audit/metrics coverage around archive runs, and continue hardening moderator workflow tooling.

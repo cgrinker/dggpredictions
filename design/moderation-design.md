@@ -20,6 +20,7 @@
 | Close market early | Admin Console / Market detail | `POST /internal/markets/:id/close` | Requires reason text; cancels scheduled auto-close. |
 | Resolve market | Admin Console / Market detail | `POST /internal/markets/:id/resolve` | Requires outcome (yes/no), optional resolution notes. |
 | Void market | Admin Console / Market detail | `POST /internal/markets/:id/void` | Requires detailed reason; warns about refunds. |
+| Archive settled markets | Admin Console → Maintenance tools | `POST /internal/markets/archive` | Supports dry-run or destructive pruning of aged resolved/void markets using lifecycle metadata. |
 | Adjust user balance | Admin Console "Manual Adjustments" panel | `POST /internal/users/:id/adjust-balance` | Dual confirmation (second moderator or typed confirmation). |
 | Reopen market (optional) | Not in Phase 1 (deferred) | – | Would require additional policy review. |
 | Modify config | Phase 2 (read-only now) | – | Form to edit starting balance etc. |
@@ -129,3 +130,8 @@
 - Server endpoints enforcing moderator checks and writing audit logs.
 - Persistence keys for `ModeratorAction` implemented.
 - Tests verifying audit trail integrity and moderator flows.
+
+## Implementation Progress (Nov 11, 2025)
+- ✅ Moderator lifecycle console covers publish, close, resolve, and void flows with UI wiring to the refreshed API layer.
+- ✅ Archive maintenance endpoint is live server-side with schema validation and controller tests, paving the way for console tooling.
+- 🔄 Next up: expose archival controls and dry-run reporting in the moderator console and broaden audit log surfacing for maintenance actions.
