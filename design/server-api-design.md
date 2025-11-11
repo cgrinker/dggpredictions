@@ -69,7 +69,7 @@ The server entry point configures:
 | `GET /internal/audit/logs` | Fetch recent moderator actions | Query `limit` | For audit UI |
 
 ### Scheduler endpoints (invoked by platform)
-- `POST /internal/scheduler/market-close`: Body includes `{ marketId }`; verifies market state then calls service to close & cleanup job record.
+- `POST /internal/scheduler/market-close`: Body includes `{ subredditId, marketId }`; verifies market state then calls service to close & cleanup job record.
 - `POST /internal/scheduler/leaderboard-rollover`: Runs weekly/monthly maintenance.
 - Additional tasks (overdue resolution reminders) share `/internal/scheduler/*` namespace.
 
@@ -89,8 +89,9 @@ Scheduler handlers require shared secret? Not necessary; accessible only by Devv
   - `listMarkets(filter, pagination)` → uses repository to fetch sorted set and hydrates market summaries.
   - `getMarketDetail(id, userId)` → loads market and optional user bet; enrich with odds.
   - `createDraft(payload, context)` → validates schedule (closesAt > now + min lead), ensures max open markets limit.
-  - `publishMarket(id, context)` → ensures state `draft`, schedules close job via `SchedulerService`, updates status and audit log.
-  - `closeMarket(id, source)` → ensures state `open`, updates to `closed`, cancels/schedules jobs accordingly.
+  - `publishMarket(id, context)` → ensures state `draft`, schedules close job via `SchedulerService`, updates status and audit log, allowing optional override to disable or adjust auto-close window.
+  - `closeMarket(id, source)` → ensures state `open`, updates to `closed`, cancels pending close job, and records moderator metadata.
+  - `autoCloseMarket(subredditId, id)` → invoked by scheduler callback to close open markets, cleanup job persistence, and annotate metadata for later auditing.
   - `resolveMarket(id, outcome, context)` → obtains lock, delegates settlement to `LedgerService`, updates audit log.
   - `voidMarket(id, reason, context)` → triggers refund flow.
   - `updateMarketMetadata(id, patch)` → only allowed fields; ensures no bets yet if certain fields change.
@@ -152,14 +153,12 @@ Errors raised by services should include machine-readable `code` (e.g., `MARKET_
 - Controller/service/repository skeletons with TODOs referencing persistence functions.
 - Automated tests covering core flows.
 
-## Implementation Progress (Nov 10, 2025)
-- ✅ Service layer beginnings implemented: `ConfigService`, `MarketsService`, `BetsService`, and `LedgerService` orchestrate config reads, bet placement validation, and ledger writes.
-- ✅ Repositories for markets, bets, balances, ledger, and config created under `src/server/repositories`, providing typed Redis accessors used by services.
-- ✅ Shared logging, tracing, context hydration, and error mapping middleware wired into the Express router for consistent request handling.
-- ✅ Market, user, and leaderboard controllers now live, exposing `/api/markets/*`, `/api/users/me/balance`, `/api/users/me/bets`, and `/api/leaderboard` endpoints backed by the services.
-- ✅ Bet placement flow now enforces wager rules, single active bet per market, and creates ledger entries via transactional helper.
-- ✅ Ledger service now rolls positive ledger deltas into leaderboard sorted sets to keep standings fresh.
-- ✅ Moderator resolve/void endpoints now execute settlement payouts/refunds via transactional helpers while leaving leaderboard resets as a manual process.
-- ✅ Vitest suite now covers happy-path settlement and void flows to guard against payout/regression issues.
-- ✅ Scheduler service and repository scaffolded to schedule/cancel market-close jobs via Devvit scheduler with accompanying unit tests.
-- 🔄 Moderator-focused controllers plus scheduler-triggered handlers remain to be implemented.
+## Implementation Progress (Nov 11, 2025)
+- ✅ Core services (`ConfigService`, `MarketsService`, `BetsService`, `LedgerService`) and repositories handle config reads, bet placement, settlements, and ledger writes under transactional helpers.
+- ✅ Middleware stack (tracing, context hydration, auth, error handling) and public controllers expose participant routes for markets, wallet, bets, and leaderboards.
+- ✅ Moderator resolve/void flows execute settlements/refunds with ledger integration and accompanying Vitest coverage.
+- ✅ Scheduler service and repository persist Devvit job metadata with unit tests guarding schedule/cancel behavior.
+- ✅ Markets service now orchestrates publish/close lifecycle end-to-end, including scheduler job scheduling, cancellation, and auto-close metadata cleanup.
+- ✅ Moderator publish/close endpoints plus the `/internal/scheduler/market-close` handler are live, invoking the enhanced service methods and logging skipped jobs.
+- ✅ Lifecycle test suite expanded to cover publish, manual close, scheduler auto-close, and override handling.
+- 🔄 Remaining work: surface lifecycle controls in the client/admin UI, implement archival policies, flesh out moderator workflow tooling, and deepen observability hooks.

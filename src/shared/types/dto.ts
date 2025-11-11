@@ -64,7 +64,7 @@ export interface MarketStateChangeRequest {
 }
 
 export interface PublishMarketRequest extends MarketStateChangeRequest {
-  readonly autoCloseOverrideMinutes?: number;
+  readonly autoCloseOverrideMinutes?: number | null;
 }
 
 export interface ResolveMarketRequest extends MarketStateChangeRequest {

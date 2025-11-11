@@ -59,7 +59,7 @@ Devvit Settings (per installation)
 - **Primary record**: Hash at `market:<marketId>` plus insertion into `markets` sorted set for listing by creation time.
 - **Indices**: Additional sorted sets by status (`markets:status:<status>`) enable quick filtered queries. `status` hash field mirrors membership.
 - **Lifecycle updates**: Use transactions to update hash + zset membership atomically. E.g., when closing, remove from `markets:status:open`, add to `markets:status:closed`, update status field.
-- **Metadata**: Optional JSON field inside hash (stored as string) for future extensibility (e.g., tags, resolution notes).
+- **Metadata**: Optional JSON field inside hash (stored as string) for future extensibility (e.g., tags, resolution notes, lifecycle markers such as `publishedBy`, `lastPublishedAt`, `autoCloseOverrideMinutes`, `closedBy`, `lastClosedAt`, `autoClosedByScheduler`, `lastAutoClosedAt`).
 
 ### Bets
 - **Primary record**: Hash at `bet:<betId>`.
@@ -113,7 +113,7 @@ Devvit Settings (per installation)
 - Similar to resolution but ledger delta is positive refund amount returning original wager. Ensure idempotency via bet status guard (`refunded`).
 
 ## Scheduler Usage
-- **Auto-close**: When publishing a market, schedule `market-close` one-off job at `closesAt + grace`. Store job ID in `scheduler:market:<marketId>:close`. Handler verifies market still `open`, flips to `closed` within transaction.
+- **Auto-close**: When publishing a market, schedule `market-close` one-off job at `closesAt + grace`. Store job ID in `scheduler:market:<marketId>:close`. Handler verifies market still `open`, flips to `closed` within transaction, clears the stored job ID, and annotates metadata (`autoClosedByScheduler`, `lastAutoClosedAt`) for audit/analytics.
 - **Reminder/overdue**: Optional recurring job to list `closed` markets older than X hours without resolution and ping moderators via modmail (subject to API approval).
 - **Leaderboard resets**: Weekly/monthly job to snapshot leaderboard, reset counters (`weeklyEarned`, etc.). Job ensures creation count stays within 60/min; batch operations.
 
@@ -154,14 +154,12 @@ Devvit Settings (per installation)
 - Transaction helper utilities with logging/instrumentation.
 - Tests covering bet placement, resolution, refund flows, leaderboard updates, and scheduler job scheduling/cancellation.
 
-## Implementation Progress (Nov 10, 2025)
-- ✅ Redis repositories landed under `src/server/repositories` for markets, bets, balances, ledger entries, and config caching.
-- ✅ Transaction + Redis key utilities created in `src/server/utils`, aligning with planned retry/backoff patterns.
-- ✅ Config caching implemented with TTL-backed snapshots and validation against shared schemas.
-- ✅ Market repository enforces status index maintenance and user bet pointer writes; bet repository now maintains per-user all/active indexes plus listing helpers powering wallet and history endpoints.
-- ✅ Balance/ledger helpers support atomic credit/debit workflows and ledger entry creation.
-- ✅ Ledger service now pushes positive ledger deltas into weekly/monthly/all-time leaderboard sorted sets.
-- ✅ Settlement and refund flows now run inside Redis transactions, updating balances, ledger entries, and clearing user pointers, with leaderboard resets intentionally left for manual moderation actions.
-- ✅ Added unit coverage around settlement and refund flows to detect regressions in payout math or pointer cleanup.
-- ✅ Scheduler repository/service now persist market-close job metadata around Devvit scheduler IDs, with tests covering schedule and cancel flows.
-- 🔄 Archival policies and scheduler coordination still pending.
+## Implementation Progress (Nov 11, 2025)
+- ✅ Redis repositories and transaction utilities underpin markets, bets, balances, ledger entries, config caching, and scheduler job metadata.
+- ✅ Config caching validated against shared schemas with TTL-backed snapshots for fast reads.
+- ✅ Market repository maintains status indices and user bet pointers; bet repository powers wallet/history listings with per-user indexes.
+- ✅ Balance/ledger helpers enforce atomic credit/debit workflows and keep leaderboard counters in sync.
+- ✅ Settlement/refund flows execute within transactions, clearing pointers and updating ledger plus leaderboard state under unit coverage.
+- ✅ Scheduler repository/service manage market-close jobs and now integrate with MarketsService to clean persistence when jobs fire.
+- ✅ Market metadata schema expanded to track publish/close actors, overrides, and scheduler-driven closures for future archival policies.
+- 🔄 Next up: define archival pruning strategies and moderator workflow tooling that leverage the enriched metadata.

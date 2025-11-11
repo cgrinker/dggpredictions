@@ -47,6 +47,16 @@
   - Display current `startingBalance`, `minBet`, `maxBet`, etc.
   - Provide link/instructions for request to change (until UI editing implemented).
 
+## Lifecycle Metadata & Workflow Automation
+- Persisted metadata fields (`publishedBy`, `lastPublishedAt`, `autoCloseOverrideMinutes`, `closedBy`, `lastClosedAt`, `autoClosedByScheduler`, `lastAutoClosedAt`) power the moderator console and upcoming automation.
+- UI treatment:
+  - Draft grid shows `lastPublishedAt` when re-publishing attempts occur and surfaces override state (“Auto-close disabled”).
+  - Open market table highlights rows with `autoClosedByScheduler === true` in the last 24 hours to signal follow-up for resolution.
+- Scheduler callbacks stamp `autoClosedByScheduler` and `lastAutoClosedAt`; the console will display a “Auto closed” badge and automatically move items into the resolution queue.
+- Metadata feeds notification logic: if `lastClosedAt` exceeds configurable SLA without resolution, surface an `Overdue` badge and optionally send modmail in future phase.
+- For archival planning, capture `lastSettledAt` plus lifecycle timestamps to determine when markets can be pruned (e.g., delete bets N days after `lastSettledAt` and `lastAutoClosedAt`). Metadata enables tiered retention policies (recent vs. aged markets) without scanning bets.
+- All lifecycle mutations append an entry to the audit log referencing these metadata fields so moderators can reconstruct timelines quickly.
+
 ## Confirmation & Safeguards
 - All destructive operations (close, resolve, void, adjust balance) require confirmation dialog with summary of consequences.
 - Double confirmation for manual balance adjust: 
