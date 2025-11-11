@@ -166,6 +166,7 @@ _Note: These are internal Devvit Web routes mounted under `/api/*` (or `/interna
 ## Implementation Progress (Nov 11, 2025)
 - ✅ Participant-facing flows (markets lobby, detail, betting, wallet, bets history, leaderboard) are live in the Devvit client, backed by typed hooks and `/api/*` endpoints.
 - ✅ Server services cover market lifecycle end-to-end (publish, close, resolve, void) with archival workflows wired to Redis repositories and audit logging for moderator actions.
-- ✅ Moderator lifecycle console now includes recent audit log visibility alongside publish/close/resolve/void controls.
-- 🔄 Observability and admin tooling (metrics counters, scheduler dashboards, archival UI, balance adjustments) remain outstanding for a future iteration.
+- ✅ Moderator lifecycle console now includes recent audit log visibility alongside publish/close/resolve/void controls and the new manual balance adjustment workflow.
+- ✅ Moderator balance adjustments are processed through a dedicated service that records ledger entries, snapshots the before/after state, and exposes the workflow in the console.
+- 🔄 Observability and admin tooling (metrics counters, scheduler dashboards, archival UI) remain outstanding for a future iteration.
 - 🔄 Nightly export/reporting pipelines are still planned pending platform approvals.

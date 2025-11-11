@@ -6,6 +6,7 @@ import { isApiError } from '../api/client.js';
 import { useMarkets } from '../hooks/useMarkets.js';
 import { useAuditLog } from '../hooks/useAuditLog.js';
 import { formatDateTime, formatPoints } from '../utils/format.js';
+import { ManualAdjustmentPanel } from './ManualAdjustmentPanel.js';
 
 interface FeedbackState {
   readonly type: 'success' | 'error';
@@ -524,6 +525,8 @@ export const MarketLifecyclePanel = () => {
           </ul>
         )}
       </section>
+
+      <ManualAdjustmentPanel auditActions={auditActions} onAdjustmentRecorded={refreshAll} />
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">

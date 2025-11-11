@@ -181,6 +181,6 @@ src/client/
 
 ## Implementation Progress (Nov 11, 2025)
 - ✅ Participant experiences (Markets lobby, Market detail with bet slip, Wallet, Bets, Leaderboard) are implemented and wired to live hooks/APIs with optimistic updates where appropriate.
-- ✅ Moderator lifecycle console (`MarketLifecyclePanel`) now includes an integrated audit log viewer and publishes/closures/resolutions backed by the new audit endpoints.
-- ✅ Client API and hook layers cover markets, bets, wallet, leaderboard, and audit log flows with consistent error handling utilities.
-- 🔄 Moderator-only extensions (balance adjustments, archival tooling, config editing) and richer observability affordances are scheduled for upcoming work.
+- ✅ Moderator lifecycle console (`MarketLifecyclePanel`) now includes an integrated audit log viewer, publish/close/resolve/void controls, and the manual balance adjustment form with dual-confirmation safeguards.
+- ✅ Client API and hook layers cover markets, bets, wallet, leaderboard, audit log flows, and moderator balance adjustments with consistent error handling utilities.
+- 🔄 Moderator-only extensions (archival tooling, config editing) and richer observability affordances are scheduled for upcoming work.

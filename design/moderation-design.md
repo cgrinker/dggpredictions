@@ -134,4 +134,5 @@
 ## Implementation Progress (Nov 11, 2025)
 - ✅ Moderator lifecycle console covers publish, close, resolve, and void flows with UI wiring to the refreshed API layer.
 - ✅ Archive maintenance endpoint is live server-side with schema validation and controller tests, paving the way for console tooling.
+- ✅ Manual balance adjustments now flow through a dedicated service with ledger entries, audit snapshots, and a moderator UI form requiring confirmation safeguards.
 - 🔄 Next up: expose archival controls and dry-run reporting in the moderator console and broaden audit log surfacing for maintenance actions.

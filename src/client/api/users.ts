@@ -4,6 +4,9 @@ import type {
   UserBetsResponse,
   BetSummary,
   PaginatedResponse,
+  AdjustBalanceRequest,
+  AdjustBalanceResponse,
+  AdjustBalanceResponseEnvelope,
 } from '../../shared/types/dto.js';
 import { apiFetch, type ApiError } from './client.js';
 
@@ -40,3 +43,18 @@ export const getUserBets = async (options: {
 };
 
 export type UsersApiError = ApiError;
+
+export const adjustUserBalance = async (
+  targetUserId: string,
+  payload: AdjustBalanceRequest,
+): Promise<AdjustBalanceResponse> => {
+  const envelope = await apiFetch<AdjustBalanceResponseEnvelope>(
+    `/api/internal/users/${targetUserId}/adjust-balance`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+
+  return envelope.data;
+};

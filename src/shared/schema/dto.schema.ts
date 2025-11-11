@@ -12,6 +12,7 @@ import {
   PointsSchema,
   SubredditIdSchema,
   UserIdSchema,
+  UserBalanceSchema,
 } from './entities.schema.js';
 import { ModeratorActionSchema } from './moderation.schema.js';
 
@@ -142,11 +143,17 @@ export const VoidMarketRequestSchema = MarketStateChangeRequestSchema.extend({
 
 export const AdjustBalanceRequestSchema = z
   .object({
-    targetUserId: UserIdSchema,
-    subredditId: SubredditIdSchema,
     delta: PointsSchema,
+    mode: z.enum(['credit', 'debit']),
     reasonCode: z.enum(['DISPUTE_REFUND', 'BUG_FIX', 'MOD_REWARD', 'OTHER']),
     memo: z.string().max(2000).optional(),
+  })
+  .strict();
+
+export const AdjustBalanceResponseSchema = z
+  .object({
+    balance: UserBalanceSchema,
+    auditAction: ModeratorActionSchema,
   })
   .strict();
 

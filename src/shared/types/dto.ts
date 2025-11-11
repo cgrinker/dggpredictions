@@ -6,9 +6,7 @@ import type {
   MarketId,
   MarketStatus,
   Points,
-  SubredditId,
   UserBalance,
-  UserId,
 } from './entities.js';
 import type { ModeratorActionBase } from './moderation.js';
 
@@ -108,12 +106,24 @@ export interface AuditLogResponse {
 
 export type ModeratorActionLogEntry = ModeratorActionBase;
 
+export type BalanceAdjustmentMode = 'credit' | 'debit';
+
+export type BalanceAdjustmentReasonCode =
+  | 'DISPUTE_REFUND'
+  | 'BUG_FIX'
+  | 'MOD_REWARD'
+  | 'OTHER';
+
 export interface AdjustBalanceRequest {
-  readonly targetUserId: UserId;
-  readonly subredditId: SubredditId;
   readonly delta: Points;
-  readonly reasonCode: 'DISPUTE_REFUND' | 'BUG_FIX' | 'MOD_REWARD' | 'OTHER';
+  readonly mode: BalanceAdjustmentMode;
+  readonly reasonCode: BalanceAdjustmentReasonCode;
   readonly memo?: string;
+}
+
+export interface AdjustBalanceResponse {
+  readonly balance: UserBalance;
+  readonly auditAction: ModeratorActionLogEntry;
 }
 
 export interface LeaderboardResponse {
@@ -149,3 +159,4 @@ export type ResolveMarketResponseEnvelope = ApiSuccessEnvelope<Market> & {
   };
 };
 export type AuditLogResponseEnvelope = ApiSuccessEnvelope<AuditLogResponse>;
+export type AdjustBalanceResponseEnvelope = ApiSuccessEnvelope<AdjustBalanceResponse>;
