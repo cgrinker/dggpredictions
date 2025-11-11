@@ -180,7 +180,7 @@ src/client/
 - Dark mode theme depending on Reddit client settings (if accessible via Devvit). 
 
 ## Implementation Progress (Nov 11, 2025)
-- ✅ Moderator lifecycle console (`MarketLifecyclePanel`) replaces the placeholder counter and wires publish/close actions to the API.
-- ✅ Client API and hook layer now expose typed helpers for lifecycle operations with optimistic UI feedback.
-- 🔄 Participant experiences (lobby, market detail, betting flows, wallet, leaderboard) still need to be built atop the shared hooks.
-- 🔄 Admin console screens for archival maintenance, audit review, and configuration remain outstanding.
+- ✅ Participant experiences (Markets lobby, Market detail with bet slip, Wallet, Bets, Leaderboard) are implemented and wired to live hooks/APIs with optimistic updates where appropriate.
+- ✅ Moderator lifecycle console (`MarketLifecyclePanel`) now includes an integrated audit log viewer and publishes/closures/resolutions backed by the new audit endpoints.
+- ✅ Client API and hook layers cover markets, bets, wallet, leaderboard, and audit log flows with consistent error handling utilities.
+- 🔄 Moderator-only extensions (balance adjustments, archival tooling, config editing) and richer observability affordances are scheduled for upcoming work.

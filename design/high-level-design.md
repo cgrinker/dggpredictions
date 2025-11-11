@@ -164,8 +164,8 @@ _Note: These are internal Devvit Web routes mounted under `/api/*` (or `/interna
 - Prototype archival maintenance UI in staging to ensure Devvit platform assumptions hold before production rollout.
 
 ## Implementation Progress (Nov 11, 2025)
-- ✅ Server services cover market lifecycle end-to-end (publish, close, resolve, void) with archival workflows wired to Redis repositories.
-- ✅ Moderator lifecycle console and supporting client API modules ship publish/close interactions; scheduler callbacks verified through tests.
-- ✅ Shared DTOs and schemas aligned across client/server with Vitest suites covering core services and controller routes.
-- 🔄 Participant UI (lobby, betting, wallet) remains to be implemented atop the new service layer.
-- 🔄 Leaderboard generation, balance adjustment tooling, and full audit surfacing are scheduled for the next iteration.
+- ✅ Participant-facing flows (markets lobby, detail, betting, wallet, bets history, leaderboard) are live in the Devvit client, backed by typed hooks and `/api/*` endpoints.
+- ✅ Server services cover market lifecycle end-to-end (publish, close, resolve, void) with archival workflows wired to Redis repositories and audit logging for moderator actions.
+- ✅ Moderator lifecycle console now includes recent audit log visibility alongside publish/close/resolve/void controls.
+- 🔄 Observability and admin tooling (metrics counters, scheduler dashboards, archival UI, balance adjustments) remain outstanding for a future iteration.
+- 🔄 Nightly export/reporting pipelines are still planned pending platform approvals.
