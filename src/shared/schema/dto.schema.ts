@@ -109,7 +109,13 @@ export const MarketStateChangeRequestSchema = z
   .strict();
 
 export const PublishMarketRequestSchema = MarketStateChangeRequestSchema.extend({
-  autoCloseOverrideMinutes: z.number().int().min(1).max(10_080).optional(),
+  autoCloseOverrideMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(10_080)
+    .nullable()
+    .optional(),
 });
 
 export const ResolveMarketRequestSchema = MarketStateChangeRequestSchema.extend({

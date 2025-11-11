@@ -14,6 +14,7 @@ import { LedgerService } from './services/ledger.service.js';
 import { LeaderboardRepository } from './repositories/leaderboard.repository.js';
 import { LeaderboardService } from './services/leaderboard.service.js';
 import { logger } from './logging.js';
+import { SchedulerService } from './services/scheduler.service.js';
 
 const configService = new ConfigService();
 const marketRepository = new MarketRepository();
@@ -21,12 +22,14 @@ const betRepository = new BetRepository();
 const balanceRepository = new BalanceRepository();
 const ledgerService = new LedgerService();
 const leaderboardRepository = new LeaderboardRepository();
+const schedulerService = new SchedulerService();
 
 const marketsService = new MarketsService(
   marketRepository,
   betRepository,
   balanceRepository,
   ledgerService,
+  schedulerService,
   configService,
 );
 const betsService = new BetsService(

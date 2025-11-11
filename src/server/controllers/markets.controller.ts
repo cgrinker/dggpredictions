@@ -1,15 +1,24 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import type { MarketId } from '../../shared/types/entities.js';
-import { MarketStatusSchema } from '../../shared/schema/entities.schema.js';
-import { PlaceBetRequestSchema } from '../../shared/schema/dto.schema.js';
+import {
+  MarketIdSchema,
+  MarketStatusSchema,
+  SubredditIdSchema,
+} from '../../shared/schema/entities.schema.js';
+import {
+  PlaceBetRequestSchema,
+  PublishMarketRequestSchema,
+  ResolveMarketRequestSchema,
+  VoidMarketRequestSchema,
+} from '../../shared/schema/dto.schema.js';
 import { ensureValid } from '../../shared/validation.js';
 import { MarketsService } from '../services/markets.service.js';
 import { BetsService } from '../services/bets.service.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { UnauthorizedError, ValidationError } from '../errors.js';
 import { requireModerator } from '../middleware/auth.js';
-import { ResolveMarketRequestSchema, VoidMarketRequestSchema } from '../../shared/schema/dto.schema.js';
+import { logger } from '../logging.js';
 
 const listQuerySchema = z
   .object({
@@ -22,6 +31,13 @@ const listQuerySchema = z
 const placeBetBodySchema = PlaceBetRequestSchema.pick({ side: true, wager: true });
 const resolveMarketBodySchema = ResolveMarketRequestSchema.pick({ resolution: true, notes: true });
 const voidMarketBodySchema = VoidMarketRequestSchema.pick({ reason: true });
+const publishMarketBodySchema = PublishMarketRequestSchema.pick({ autoCloseOverrideMinutes: true });
+const schedulerCloseBodySchema = z
+  .object({
+    subredditId: SubredditIdSchema,
+    marketId: MarketIdSchema,
+  })
+  .strict();
 
 export interface MarketControllerDependencies {
   readonly marketsService: MarketsService;
@@ -104,6 +120,65 @@ export const registerMarketRoutes = (
   );
 
   router.post(
+    '/internal/markets/:id/publish',
+    requireModerator,
+    asyncHandler(async (req, res) => {
+      const context = req.appContext;
+      if (!context) {
+        throw new ValidationError('Request context unavailable.');
+      }
+
+      const marketId = req.params.id as MarketId;
+      const body = ensureValid(
+        publishMarketBodySchema,
+        typeof req.body === 'object' && req.body !== null ? req.body : {},
+        'Invalid publish payload.',
+      );
+
+      const override = Object.prototype.hasOwnProperty.call(body, 'autoCloseOverrideMinutes')
+        ? { autoCloseOverrideMinutes: body.autoCloseOverrideMinutes ?? null }
+        : {};
+
+      const options = {
+        ...(context.userId ? { moderatorId: context.userId } : {}),
+        ...override,
+      } satisfies Parameters<MarketsService['publishMarket']>[2];
+
+      const result = await dependencies.marketsService.publishMarket(
+        context.subredditId,
+        marketId,
+        options,
+      );
+
+      res.json({ data: result });
+    }),
+  );
+
+  router.post(
+    '/internal/markets/:id/close',
+    requireModerator,
+    asyncHandler(async (req, res) => {
+      const context = req.appContext;
+      if (!context) {
+        throw new ValidationError('Request context unavailable.');
+      }
+
+      const marketId = req.params.id as MarketId;
+      const options = {
+        ...(context.userId ? { moderatorId: context.userId } : {}),
+      } satisfies Parameters<MarketsService['closeMarket']>[2];
+
+      const result = await dependencies.marketsService.closeMarket(
+        context.subredditId,
+        marketId,
+        options,
+      );
+
+      res.json({ data: result });
+    }),
+  );
+
+  router.post(
     '/internal/markets/:id/resolve',
     requireModerator,
     asyncHandler(async (req, res) => {
@@ -153,6 +228,38 @@ export const registerMarketRoutes = (
       );
 
       res.json({ data: result.market, meta: { settlement: result.totals } });
+    }),
+  );
+
+  router.post(
+    '/internal/scheduler/market-close',
+    asyncHandler(async (req, res) => {
+      const payload = ensureValid(
+        schedulerCloseBodySchema,
+        typeof req.body === 'object' && req.body !== null ? req.body : {},
+        'Invalid scheduler payload.',
+      );
+
+      const result = await dependencies.marketsService.autoCloseMarket(
+        payload.subredditId,
+        payload.marketId,
+      );
+
+      if (result.status === 'closed') {
+        res.json({ data: result.market, meta: { status: 'closed' } });
+        return;
+      }
+
+      logger.info('scheduler close skipped', {
+        subredditId: payload.subredditId,
+        marketId: payload.marketId,
+        reason: result.reason ?? 'unknown',
+      });
+
+      res.json({
+        data: result.market ?? null,
+        meta: { status: 'skipped', reason: result.reason ?? 'unknown' },
+      });
     }),
   );
 };

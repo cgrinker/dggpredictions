@@ -294,7 +294,7 @@ describe('MarketsService lifecycle', () => {
     expect(scheduleCalls[0][0]).toBe(subredditId);
     expect(scheduleCalls[0][1]).toBe(marketId);
     const scheduledRunAt = scheduleCalls[0][2].runAt as Date;
-  const expectedRunAt = new Date(closesAtDate.getTime() + 5 * 60_000);
+    const expectedRunAt = new Date(closesAtDate.getTime() + 5 * 60_000);
     expect(scheduledRunAt.toISOString()).toBe(expectedRunAt.toISOString());
 
     const savedMarket = (marketRepo.save as VitestMock).mock.calls[0][1] as Market;
@@ -330,10 +330,52 @@ describe('MarketsService lifecycle', () => {
     expect(result.status).toBe('closed');
     expect(result.metadata?.closedBy).toBe(moderatorId);
     expect(result.metadata?.lastClosedAt).toBeDefined();
+    expect(result.metadata?.autoClosedByScheduler).toBeUndefined();
     expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
     expect(schedulerService.scheduleMarketClose).not.toHaveBeenCalled();
 
     const savedMarket = (marketRepo.save as VitestMock).mock.calls[0][1] as Market;
     expect(savedMarket.status).toBe('closed');
+  });
+
+  it('auto closes an open market during scheduler callback', async () => {
+    const { service, schedulerService, marketRepo } = setupService({
+      marketOverrides: { status: 'open' },
+    });
+
+    const result = await service.autoCloseMarket(subredditId, marketId);
+
+    expect(result.status).toBe('closed');
+    expect(result.market?.status).toBe('closed');
+    expect(result.market?.metadata?.autoClosedByScheduler).toBe(true);
+    expect(result.market?.metadata?.lastAutoClosedAt).toBeDefined();
+    expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
+    const savedMarket = (marketRepo.save as VitestMock).mock.calls[0][1] as Market;
+    expect(savedMarket.metadata?.autoClosedByScheduler).toBe(true);
+  });
+
+  it('skips scheduler close when market is not open', async () => {
+    const { service, schedulerService, marketRepo } = setupService({
+      marketOverrides: { status: 'closed' },
+    });
+
+    const result = await service.autoCloseMarket(subredditId, marketId);
+
+    expect(result.status).toBe('skipped');
+    expect(result.reason).toBe('market_status_closed');
+    expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
+    expect(marketRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('skips scheduler close when market is missing', async () => {
+    const { service, schedulerService, marketRepo } = setupService();
+    (marketRepo.getById as VitestMock).mockResolvedValueOnce(null);
+
+    const result = await service.autoCloseMarket(subredditId, marketId);
+
+    expect(result.status).toBe('skipped');
+    expect(result.reason).toBe('not_found');
+    expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
+    expect(marketRepo.save).not.toHaveBeenCalled();
   });
 });

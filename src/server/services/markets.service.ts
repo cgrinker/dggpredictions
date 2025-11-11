@@ -66,6 +66,17 @@ type CloseMarketOptions = {
   readonly moderatorId?: UserId | null;
 };
 
+type CloseMarketInternalOptions = {
+  readonly moderatorId?: UserId | null;
+  readonly auto: boolean;
+};
+
+interface AutoCloseResult {
+  readonly status: 'closed' | 'skipped';
+  readonly market?: Market;
+  readonly reason?: string;
+}
+
 interface ListMarketsOptions {
   readonly status?: MarketStatus;
   readonly page?: number;
@@ -308,24 +319,35 @@ export class MarketsService {
     if (market.status !== 'open') {
       throw new ValidationError('Only open markets can be closed.');
     }
+    const internalOptions: CloseMarketInternalOptions =
+      options && 'moderatorId' in options
+        ? { auto: false, moderatorId: options.moderatorId ?? null }
+        : { auto: false };
 
-    await this.scheduler.cancelMarketClose(subredditId, marketId);
+    return this.closeMarketInternal(subredditId, market, internalOptions);
+  }
 
-    const timestamp = nowIso();
-    const metadataPatch: Record<string, unknown> = {
-      closedBy: options?.moderatorId ?? undefined,
-      lastClosedAt: timestamp,
-    };
+  async autoCloseMarket(subredditId: SubredditId, marketId: MarketId): Promise<AutoCloseResult> {
+    const market = await this.markets.getById(subredditId, marketId);
+    if (!market) {
+      await this.scheduler.cancelMarketClose(subredditId, marketId);
+      return { status: 'skipped', reason: 'not_found' } satisfies AutoCloseResult;
+    }
 
-    const updated = this.applyMarketPatch(
-      market,
-      {
-        status: 'closed',
-      },
-      metadataPatch,
-    );
+    if (market.status !== 'open') {
+      await this.scheduler.cancelMarketClose(subredditId, marketId);
+      return {
+        status: 'skipped',
+        reason: `market_status_${market.status}`,
+        market,
+      } satisfies AutoCloseResult;
+    }
 
-    return this.markets.save(subredditId, updated);
+    const closed = await this.closeMarketInternal(subredditId, market, {
+      auto: true,
+      moderatorId: null,
+    });
+    return { status: 'closed', market: closed } satisfies AutoCloseResult;
   }
 
   private ensureCloseTimeIsValid(raw: string) {
@@ -604,6 +626,41 @@ export class MarketsService {
     const raw = (wager / supportingPot) * totalPool;
     const payout = Math.max(wager, Math.floor(raw));
     return payout;
+  }
+
+  private async closeMarketInternal(
+    subredditId: SubredditId,
+    market: Market,
+    options: CloseMarketInternalOptions,
+  ): Promise<Market> {
+    await this.scheduler.cancelMarketClose(subredditId, market.id);
+
+    const timestamp = nowIso();
+    const metadataPatch: Record<string, unknown | undefined> = {
+      lastClosedAt: timestamp,
+    };
+
+    if ('moderatorId' in options) {
+      metadataPatch.closedBy = options.moderatorId ?? undefined;
+    }
+
+    if (options.auto) {
+      metadataPatch.autoClosedByScheduler = true;
+      metadataPatch.lastAutoClosedAt = timestamp;
+    } else {
+      metadataPatch.autoClosedByScheduler = undefined;
+      metadataPatch.lastAutoClosedAt = undefined;
+    }
+
+    const updated = this.applyMarketPatch(
+      market,
+      {
+        status: 'closed',
+      },
+      metadataPatch,
+    );
+
+    return this.markets.save(subredditId, updated);
   }
 
   private buildBalanceAfterPayout(
