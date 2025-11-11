@@ -15,6 +15,7 @@ import { LeaderboardRepository } from './repositories/leaderboard.repository.js'
 import { LeaderboardService } from './services/leaderboard.service.js';
 import { logger } from './logging.js';
 import { SchedulerService } from './services/scheduler.service.js';
+import { AuditLogService } from './services/audit-log.service.js';
 
 const configService = new ConfigService();
 const marketRepository = new MarketRepository();
@@ -23,6 +24,7 @@ const balanceRepository = new BalanceRepository();
 const ledgerService = new LedgerService();
 const leaderboardRepository = new LeaderboardRepository();
 const schedulerService = new SchedulerService();
+const auditLogService = new AuditLogService();
 
 const marketsService = new MarketsService(
   marketRepository,
@@ -31,6 +33,7 @@ const marketsService = new MarketsService(
   ledgerService,
   schedulerService,
   configService,
+  auditLogService,
 );
 const betsService = new BetsService(
   marketRepository,
@@ -50,7 +53,7 @@ app.use(express.text());
 app.use(tracingMiddleware);
 app.use(createContextMiddleware(configService));
 
-const router = createAppRouter({ marketsService, betsService, leaderboardService });
+const router = createAppRouter({ marketsService, betsService, leaderboardService, auditLogService });
 app.use(router);
 
 app.use(errorHandler);

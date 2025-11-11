@@ -1,31 +1,41 @@
-## Devvit React Starter
+## dggpredictions
 
-A starter to build web applications on Reddit's developer platform
+Prediction market companion for the /r/dgg subreddit built on Reddit's Devvit platform. The web client lets participants browse markets, place bets, monitor their wallet, and climb the leaderboard, while moderators manage market lifecycles from the same bundle.
 
-- [Devvit](https://developers.reddit.com/): A way to build and deploy immersive games on Reddit
-- [Vite](https://vite.dev/): For compiling the webView
-- [React](https://react.dev/): For UI
-- [Express](https://expressjs.com/): For backend logic
-- [Tailwind](https://tailwindcss.com/): For styles
-- [Typescript](https://www.typescriptlang.org/): For type safety
+### Features
 
-## Getting Started
+- Participant navigation with quick access to Markets, Market Detail, Wallet, My Bets, and Leaderboard screens.
+- Moderator lifecycle console for publishing, closing, resolving, and auditing subreddit markets.
+- Shared API layer and hooks for markets, bets, wallet balances, and leaderboard snapshots.
+- Tailwind-styled React UI bundled through Vite for both client and server webviews.
 
-> Make sure you have Node 22 downloaded on your machine before running!
+### Prerequisites
 
-1. Run `npm create devvit@latest --template=react`
-2. Go through the installation wizard. You will need to create a Reddit account and connect it to Reddit developers
-3. Copy the command on the success page into your terminal
+- Node.js 22+
+- Reddit developer account with Devvit CLI access (`npm install -g devvit`)
 
-## Commands
+### Installation
 
-- `npm run dev`: Starts a development server where you can develop your application live on Reddit.
-- `npm run build`: Builds your client and server projects
-- `npm run deploy`: Uploads a new version of your app
-- `npm run launch`: Publishes your app for review
-- `npm run login`: Logs your CLI into Reddit
-- `npm run check`: Type checks, lints, and prettifies your app
+```bash
+npm install
+```
 
-## Cursor Integration
+### Common Scripts
 
-This template comes with a pre-configured cursor environment. To get started, [download cursor](https://www.cursor.com/downloads) and enable the `devvit-mcp` when prompted.
+- `npm run dev` – run client, server, and Devvit playtest watchers.
+- `npm run dev:vite` – start a local Vite dev server for the client UI only.
+- `npm run build` – build client and server bundles.
+- `npm exec vitest run` – execute the test suite.
+- `npm run check` – type-check, lint (with autofix), and format the repo.
+
+### Workflow Notes
+
+The React app (`src/client`) renders a top-level navigation bar. Participant tabs (Markets, Wallet, My Bets, Leaderboard) fetch data via hooks in `src/client/hooks`. Selecting a market swaps the lobby for `MarketDetailScreen`, where bets can be placed against the current wallet balance. Moderators can jump to the lifecycle console tab to publish, close, or resolve markets while reviewing recent audit metadata.
+
+Server-side controllers and services live under `src/server`. Vitest-based unit tests cover controllers, services, and scheduler orchestration. Use `npm exec vitest run` after changes to verify behavior; linting is available via `npm run lint`.
+
+### Current Progress
+
+- Backend audit logging is wired through the markets service, repository, and controller layers, and covered by unit tests (`markets.service.test.ts`, `audit.controller.test.ts`).
+- Moderator lifecycle console now includes a recent audit log viewer that consumes `/internal/audit/logs` via a dedicated client hook.
+- Repository retention trims audit history to ~2k entries per subreddit with a default fetch cap of 100 to balance visibility with storage costs.

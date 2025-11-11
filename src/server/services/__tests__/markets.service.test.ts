@@ -5,6 +5,7 @@ import type {
   Market,
   MarketId,
   MarketStatus,
+  ModeratorActionId,
   Points,
   SubredditId,
   UserBalance,
@@ -17,6 +18,7 @@ import type { BalanceRepository } from '../../repositories/balance.repository.js
 import type { LedgerService } from '../ledger.service.js';
 import type { ConfigService } from '../config.service.js';
 import type { SchedulerService } from '../scheduler.service.js';
+import type { AuditLogService } from '../audit-log.service.js';
 
 const runTransactionMock = vi.fn();
 
@@ -122,6 +124,7 @@ const setupService = (options?: {
   betRepoOverrides?: Partial<BetRepository>;
   balanceRepoOverrides?: Partial<BalanceRepository>;
   ledgerOverrides?: Partial<LedgerService>;
+  auditOverrides?: Partial<AuditLogService>;
 }) => {
   const market = createMarket(options?.marketOverrides ?? {});
   const yesBet = createBet({ side: 'yes' });
@@ -173,11 +176,30 @@ const setupService = (options?: {
     getMarketCloseJob: vi.fn().mockResolvedValue(null),
   };
 
+  const auditAction = {
+    schemaVersion: 1,
+    id: 'audit-1' as ModeratorActionId,
+    subredditId: market.subredditId,
+    performedBy: 'mod-1' as UserId,
+    performedByUsername: 'mod-user',
+    action: 'PUBLISH_MARKET' as const,
+    marketId: market.id,
+    targetUserId: null,
+    payload: {},
+    createdAt: new Date().toISOString(),
+  };
+
+  const auditService: Partial<AuditLogService> = {
+    recordAction: vi.fn().mockResolvedValue(auditAction),
+    listRecent: vi.fn().mockResolvedValue([]),
+  };
+
   Object.assign(schedulerService, options?.schedulerOverrides);
   Object.assign(marketRepo, options?.marketRepoOverrides);
   Object.assign(betRepo, options?.betRepoOverrides);
   Object.assign(balanceRepo, options?.balanceRepoOverrides);
   Object.assign(ledgerService, options?.ledgerOverrides);
+  Object.assign(auditService, options?.auditOverrides);
 
   const service = new MarketsServiceClass(
     marketRepo as MarketRepository,
@@ -186,6 +208,7 @@ const setupService = (options?: {
     ledgerService as LedgerService,
     schedulerService as SchedulerService,
     configService as ConfigService,
+    auditService as AuditLogService,
   );
 
   settlementState = {
@@ -208,13 +231,22 @@ const setupService = (options?: {
     market,
     yesBet,
     noBet,
+    auditService: auditService as AuditLogService,
   };
 };
 
 describe('MarketsService settlement', () => {
   it('resolves market and pays winners', async () => {
-    const { service, marketRepo, betRepo, balanceRepo, ledgerService, yesBet, noBet } =
-      setupService();
+    const {
+      service,
+      marketRepo,
+      betRepo,
+      balanceRepo,
+      ledgerService,
+      yesBet,
+      noBet,
+      auditService,
+    } = setupService();
 
     const response = await service.resolveMarket(
       'sub-1' as SubredditId,
@@ -265,10 +297,21 @@ describe('MarketsService settlement', () => {
       expect.anything(),
       expect.objectContaining({ status: 'resolved' }),
     );
+
+    expect(auditService.recordAction).toHaveBeenCalledWith('sub-1', {
+      performedBy: 'mod-7',
+      performedByUsername: 'unknown',
+      action: 'RESOLVE_MARKET',
+      marketId: 'market-1',
+      payload: expect.objectContaining({
+        resolution: 'yes',
+        totals: expect.objectContaining({ settledBets: 2 }),
+      }),
+    });
   });
 
   it('voids market and refunds bets', async () => {
-    const { service, marketRepo, betRepo, balanceRepo, ledgerService } = setupService({
+    const { service, marketRepo, betRepo, balanceRepo, ledgerService, auditService } = setupService({
       marketOverrides: { status: 'open' },
     });
 
@@ -298,6 +341,14 @@ describe('MarketsService settlement', () => {
       expect.anything(),
       expect.objectContaining({ status: 'void' }),
     );
+
+    expect(auditService.recordAction).toHaveBeenCalledWith('sub-1', {
+      performedBy: 'mod-99',
+      performedByUsername: 'unknown',
+      action: 'VOID_MARKET',
+      marketId: 'market-1',
+      payload: { reason: 'Cancelled due to issue' },
+    });
   });
 });
 
@@ -310,7 +361,7 @@ describe('MarketsService lifecycle', () => {
     const closesAt = closesAtDate.toISOString();
     const moderatorId = 'mod-22' as UserId;
 
-    const { service, schedulerService, marketRepo } = setupService({
+    const { service, schedulerService, marketRepo, auditService } = setupService({
       marketOverrides: { status: 'draft', closesAt },
     });
 
@@ -333,12 +384,20 @@ describe('MarketsService lifecycle', () => {
 
     const savedMarket = (marketRepo.save as VitestMock).mock.calls[0][1] as Market;
     expect(savedMarket.status).toBe('open');
+
+    expect(auditService.recordAction).toHaveBeenCalledWith(subredditId, {
+      performedBy: moderatorId,
+      performedByUsername: 'unknown',
+      action: 'PUBLISH_MARKET',
+      marketId,
+      payload: expect.objectContaining({ autoCloseOverrideMinutes: 5 }),
+    });
   });
 
   it('does not schedule auto-close when override disables it', async () => {
     const closesAt = new Date(Date.now() + 90 * 60 * 1_000).toISOString();
 
-    const { service, schedulerService } = setupService({
+    const { service, schedulerService, auditService } = setupService({
       marketOverrides: { status: 'draft', closesAt },
     });
 
@@ -350,12 +409,13 @@ describe('MarketsService lifecycle', () => {
     expect(result.metadata?.autoCloseOverrideMinutes).toBeNull();
     expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
     expect(schedulerService.scheduleMarketClose).not.toHaveBeenCalled();
+    expect(auditService.recordAction).not.toHaveBeenCalled();
   });
 
   it('closes an open market and cancels outstanding job', async () => {
     const moderatorId = 'mod-33' as UserId;
 
-    const { service, schedulerService, marketRepo } = setupService({
+    const { service, schedulerService, marketRepo, auditService } = setupService({
       marketOverrides: { status: 'open' },
     });
 
@@ -370,6 +430,14 @@ describe('MarketsService lifecycle', () => {
 
     const savedMarket = (marketRepo.save as VitestMock).mock.calls[0][1] as Market;
     expect(savedMarket.status).toBe('closed');
+
+    expect(auditService.recordAction).toHaveBeenCalledWith(subredditId, {
+      performedBy: moderatorId,
+      performedByUsername: 'unknown',
+      action: 'CLOSE_MARKET',
+      marketId,
+      payload: { mode: 'manual' },
+    });
   });
 
   it('auto closes an open market during scheduler callback', async () => {

@@ -4,6 +4,15 @@ export interface ApiError extends Error {
   readonly details?: Record<string, unknown> | undefined;
 }
 
+export const isApiError = (error: unknown): error is ApiError => {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as Partial<ApiError>;
+  return typeof candidate.status === 'number' && typeof candidate.code === 'string';
+};
+
 const DEFAULT_HEADERS = {
   'Content-Type': 'application/json',
   Accept: 'application/json',

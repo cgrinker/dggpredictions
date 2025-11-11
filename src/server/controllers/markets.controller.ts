@@ -142,6 +142,7 @@ export const registerMarketRoutes = (
 
       const options = {
         ...(context.userId ? { moderatorId: context.userId } : {}),
+           ...(context.username ? { moderatorUsername: context.username } : {}),
         ...override,
       } satisfies Parameters<MarketsService['publishMarket']>[2];
 
@@ -167,6 +168,7 @@ export const registerMarketRoutes = (
       const marketId = req.params.id as MarketId;
       const options = {
         ...(context.userId ? { moderatorId: context.userId } : {}),
+           ...(context.username ? { moderatorUsername: context.username } : {}),
       } satisfies Parameters<MarketsService['closeMarket']>[2];
 
       const result = await dependencies.marketsService.closeMarket(
@@ -192,6 +194,7 @@ export const registerMarketRoutes = (
       const payload = ensureValid(resolveMarketBodySchema, req.body, 'Invalid resolution payload.');
       const options = {
         ...(context.userId ? { moderatorId: context.userId } : {}),
+           ...(context.username ? { moderatorUsername: context.username } : {}),
         ...(payload.notes !== undefined ? { notes: payload.notes } : {}),
       } satisfies Parameters<MarketsService['resolveMarket']>[3];
 
@@ -219,6 +222,7 @@ export const registerMarketRoutes = (
       const payload = ensureValid(voidMarketBodySchema, req.body, 'Invalid void payload.');
       const options = {
         ...(context.userId ? { moderatorId: context.userId } : {}),
+           ...(context.username ? { moderatorUsername: context.username } : {}),
       } satisfies Parameters<MarketsService['voidMarket']>[3];
 
       const result = await dependencies.marketsService.voidMarket(
@@ -249,13 +253,18 @@ export const registerMarketRoutes = (
 
       const cutoff = new Date(Date.now() - body.olderThanDays * 86_400_000);
 
-      const result = await dependencies.marketsService.archiveMarkets(context.subredditId, {
+      const archiveOptions = {
         cutoff,
-        statuses: body.statuses,
-        maxMarkets: body.maxMarkets,
-        dryRun: body.dryRun,
+        ...(body.statuses ? { statuses: body.statuses } : {}),
+        ...(body.maxMarkets !== undefined ? { maxMarkets: body.maxMarkets } : {}),
+        ...(body.dryRun !== undefined ? { dryRun: body.dryRun } : {}),
         moderatorId: context.userId ?? null,
-      });
+      };
+
+      const result = await dependencies.marketsService.archiveMarkets(
+        context.subredditId,
+        archiveOptions,
+      );
 
       res.json({ data: result });
     }),

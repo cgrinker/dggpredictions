@@ -158,5 +158,14 @@ _Note: These are internal Devvit Web routes mounted under `/api/*` (or `/interna
 
 ## Next Steps
 - Validate domain model with moderation team and confirm point economy rules.
-- Break milestones into detailed design docs (client, server, persistence, moderation) with acceptance criteria.
-- Prototype key flows in staging subreddit to ensure Devvit platform assumptions hold.
+- Harden participant-facing flows beyond the moderator lifecycle (lobby, detail, betting, wallet) in the React client.
+- Stand up leaderboard calculations and surface them in both API and client layers.
+- Expand observability: metric counters, admin console dashboards, and archival reporting.
+- Prototype archival maintenance UI in staging to ensure Devvit platform assumptions hold before production rollout.
+
+## Implementation Progress (Nov 11, 2025)
+- ✅ Server services cover market lifecycle end-to-end (publish, close, resolve, void) with archival workflows wired to Redis repositories.
+- ✅ Moderator lifecycle console and supporting client API modules ship publish/close interactions; scheduler callbacks verified through tests.
+- ✅ Shared DTOs and schemas aligned across client/server with Vitest suites covering core services and controller routes.
+- 🔄 Participant UI (lobby, betting, wallet) remains to be implemented atop the new service layer.
+- 🔄 Leaderboard generation, balance adjustment tooling, and full audit surfacing are scheduled for the next iteration.

@@ -10,6 +10,7 @@ import type {
   UserBalance,
   UserId,
 } from './entities.js';
+import type { ModeratorActionBase } from './moderation.js';
 
 export interface Pagination {
   readonly page: number;
@@ -93,6 +94,20 @@ export interface VoidMarketRequest extends MarketStateChangeRequest {
   readonly reason: string;
 }
 
+export interface MarketSettlementMeta {
+  readonly settledBets: number;
+  readonly winners: number;
+  readonly refunded: number;
+  readonly totalPayout: Points;
+}
+
+export interface AuditLogResponse {
+  readonly actions: readonly ModeratorActionLogEntry[];
+  readonly fetchedAt: string;
+}
+
+export type ModeratorActionLogEntry = ModeratorActionBase;
+
 export interface AdjustBalanceRequest {
   readonly targetUserId: UserId;
   readonly subredditId: SubredditId;
@@ -128,3 +143,9 @@ export type WalletResponse = ApiSuccessEnvelope<WalletSnapshot>;
 export type UserBetsResponse = ApiSuccessEnvelope<PaginatedResponse<BetSummary>>;
 export type LeaderboardResponseEnvelope = ApiSuccessEnvelope<LeaderboardResponse>;
 export type ArchiveMarketsResponseEnvelope = ApiSuccessEnvelope<ArchiveMarketsResponse>;
+export type ResolveMarketResponseEnvelope = ApiSuccessEnvelope<Market> & {
+  readonly meta?: {
+    readonly settlement?: MarketSettlementMeta;
+  };
+};
+export type AuditLogResponseEnvelope = ApiSuccessEnvelope<AuditLogResponse>;

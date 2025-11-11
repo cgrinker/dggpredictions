@@ -8,6 +8,7 @@ import {
   UserBalanceSchema,
   UserBalanceSchemaBase,
 } from '../../shared/schema/entities.schema.js';
+import { ModeratorActionSchema } from '../../shared/schema/moderation.schema.js';
 import type {
   Bet,
   LedgerEntry,
@@ -15,6 +16,7 @@ import type {
   Points,
   UserBalance,
 } from '../../shared/types/entities.js';
+import type { ModeratorActionBase } from '../../shared/types/moderation.js';
 
 type RedisHash = Record<string, string>;
 
@@ -173,4 +175,42 @@ export const deserializeLedgerEntry = (hash: RedisHash | null): LedgerEntry | nu
   });
 
   return LedgerEntrySchema.parse(candidate);
+};
+
+export const serializeModeratorAction = (action: ModeratorActionBase): RedisHash => ({
+  schemaVersion: action.schemaVersion.toString(),
+  id: action.id,
+  subredditId: action.subredditId,
+  performedBy: action.performedBy,
+  performedByUsername: action.performedByUsername,
+  action: action.action,
+  marketId: action.marketId ?? '',
+  targetUserId: action.targetUserId ?? '',
+  payload: stringify(action.payload ?? {}),
+  snapshot: action.snapshot ? stringify(action.snapshot) : '',
+  createdAt: action.createdAt,
+  correlationId: action.correlationId ?? '',
+});
+
+export const deserializeModeratorAction = (hash: RedisHash | null): ModeratorActionBase | null => {
+  if (!assertHash(hash)) {
+    return null;
+  }
+
+  const candidate = ModeratorActionSchema.parse({
+    schemaVersion: Number(hash.schemaVersion),
+    id: hash.id,
+    subredditId: hash.subredditId,
+    performedBy: hash.performedBy,
+    performedByUsername: hash.performedByUsername,
+    action: hash.action,
+    marketId: hash.marketId ? hash.marketId : null,
+    targetUserId: hash.targetUserId ? hash.targetUserId : null,
+    payload: hash.payload ? parseJson<Record<string, unknown>>(hash.payload) ?? {} : {},
+    snapshot: hash.snapshot ? parseJson(hash.snapshot) : undefined,
+    createdAt: hash.createdAt,
+    correlationId: hash.correlationId ? hash.correlationId : undefined,
+  });
+
+  return candidate as ModeratorActionBase;
 };

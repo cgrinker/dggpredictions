@@ -107,3 +107,9 @@
 - Integrate with external monitoring (if Devvit exposes webhooks/log streaming) to forward logs to third-party analytics.
 - Build anomaly detection ML/heuristics (out of scope now).
 - Automate release notes generation from audit log of deployments.
+
+## Implementation Progress (Nov 11, 2025)
+- ✅ Structured logging, error handling, and correlation-aware responses are live in the server bundle and covered by unit tests.
+- ✅ Scheduler service tests exercise job scheduling/cancellation logging to confirm telemetry hooks function.
+- 🔄 Metrics counters, incident surfacing in the moderator console, and automated operational runbooks remain on the roadmap.
+- 🔄 Deployment/staging automation and regression checklists need codifying before broader rollout.

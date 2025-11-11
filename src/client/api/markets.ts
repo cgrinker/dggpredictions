@@ -4,7 +4,16 @@ import type {
   PaginatedResponse,
   PublishMarketRequest,
   MarketListResponse,
+  MarketDetailResponse,
+  MarketDetail,
+  PlaceBetRequest,
+  PlaceBetResponseEnvelope,
+  PlaceBetResponse,
+  ResolveMarketRequest,
+  MarketSettlementMeta,
+  ResolveMarketResponseEnvelope,
 } from '../../shared/types/dto.js';
+import type { Market } from '../../shared/types/entities.js';
 import { apiFetch, type ApiError } from './client.js';
 
 export type MarketStatusFilter = 'draft' | 'open' | 'closed' | 'resolved' | 'void';
@@ -71,3 +80,43 @@ export const closeMarket = async (marketId: string): Promise<ApiSuccessEnvelope<
 };
 
 export type MarketsApiError = ApiError;
+
+export const getMarketDetail = async (marketId: string): Promise<MarketDetail> => {
+  const envelope = await apiFetch<MarketDetailResponse>(`/api/markets/${marketId}`);
+  return envelope.data;
+};
+
+export const placeBet = async (request: PlaceBetRequest): Promise<PlaceBetResponse> => {
+  const envelope = await apiFetch<PlaceBetResponseEnvelope>(
+    `/api/markets/${request.marketId}/bets`,
+    {
+      method: 'POST',
+      body: JSON.stringify(request),
+    },
+  );
+
+  return envelope.data;
+};
+
+export interface ResolveMarketResult {
+  readonly market: Market;
+  readonly settlement: MarketSettlementMeta | null;
+}
+
+export const resolveMarket = async (
+  marketId: string,
+  payload: Pick<ResolveMarketRequest, 'resolution' | 'notes'>,
+): Promise<ResolveMarketResult> => {
+  const envelope = await apiFetch<ResolveMarketResponseEnvelope>(
+    `/internal/markets/${marketId}/resolve`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+
+  return {
+    market: envelope.data,
+    settlement: envelope.meta?.settlement ?? null,
+  } satisfies ResolveMarketResult;
+};

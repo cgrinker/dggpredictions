@@ -11,12 +11,14 @@ import type {
   UserId,
 } from '../../shared/types/entities.js';
 import type { MarketDetail, MarketSummary, PaginatedResponse } from '../../shared/types/dto.js';
+import type { ModeratorActionType } from '../../shared/types/moderation.js';
 import { MarketRepository } from '../repositories/market.repository.js';
 import { BetRepository } from '../repositories/bet.repository.js';
 import { ConfigService } from './config.service.js';
 import { BalanceRepository } from '../repositories/balance.repository.js';
 import { LedgerService } from './ledger.service.js';
 import { SchedulerService } from './scheduler.service.js';
+import { AuditLogService } from './audit-log.service.js';
 import { createMarketId } from '../utils/id.js';
 import { nowIso } from '../utils/time.js';
 import type { CreateMarketRequest } from '../../shared/types/dto.js';
@@ -46,12 +48,14 @@ type ResolveSettlementParams = {
   readonly mode: 'resolve';
   readonly resolution: BetSide;
   readonly moderatorId?: UserId | null;
+  readonly moderatorUsername?: string | null;
   readonly notes?: string;
 };
 
 type VoidSettlementParams = {
   readonly mode: 'void';
   readonly moderatorId?: UserId | null;
+  readonly moderatorUsername?: string | null;
   readonly reason: string;
 };
 
@@ -59,15 +63,18 @@ type SettlementParams = ResolveSettlementParams | VoidSettlementParams;
 
 type PublishMarketOptions = {
   readonly moderatorId?: UserId | null;
+  readonly moderatorUsername?: string | null;
   readonly autoCloseOverrideMinutes?: number | null;
 };
 
 type CloseMarketOptions = {
   readonly moderatorId?: UserId | null;
+  readonly moderatorUsername?: string | null;
 };
 
 type CloseMarketInternalOptions = {
   readonly moderatorId?: UserId | null;
+  readonly moderatorUsername?: string | null;
   readonly auto: boolean;
 };
 
@@ -106,6 +113,7 @@ export class MarketsService {
   private readonly ledger: LedgerService;
   private readonly scheduler: SchedulerService;
   private readonly config: ConfigService;
+  private readonly audit: AuditLogService;
 
   constructor(
     markets = new MarketRepository(),
@@ -114,6 +122,7 @@ export class MarketsService {
     ledger = new LedgerService(),
     scheduler = new SchedulerService(),
     config = new ConfigService(),
+    audit = new AuditLogService(),
   ) {
     this.markets = markets;
     this.bets = bets;
@@ -121,6 +130,7 @@ export class MarketsService {
     this.ledger = ledger;
     this.scheduler = scheduler;
     this.config = config;
+    this.audit = audit;
   }
 
   async list(
@@ -205,7 +215,7 @@ export class MarketsService {
     subredditId: SubredditId,
     marketId: MarketId,
     resolution: BetSide,
-    options?: { moderatorId?: UserId | null; notes?: string },
+    options?: { moderatorId?: UserId | null; moderatorUsername?: string | null; notes?: string },
   ): Promise<MarketSettlementResult> {
     const market = await this.markets.getById(subredditId, marketId);
     if (!market) {
@@ -229,17 +239,34 @@ export class MarketsService {
       mode: 'resolve',
       resolution,
       ...(options?.moderatorId !== undefined ? { moderatorId: options.moderatorId } : {}),
+      ...(options?.moderatorUsername !== undefined
+        ? { moderatorUsername: options.moderatorUsername }
+        : {}),
       ...(options?.notes !== undefined ? { notes: options.notes } : {}),
     };
 
-    return this.settleMarket(subredditId, market, bets, settlementParams);
+    const result = await this.settleMarket(subredditId, market, bets, settlementParams);
+
+    await this.recordMarketAction(subredditId, {
+      moderatorId: options?.moderatorId ?? null,
+      moderatorUsername: options?.moderatorUsername ?? null,
+      action: 'RESOLVE_MARKET',
+      marketId,
+      payload: {
+        resolution,
+        ...(options?.notes ? { notes: options.notes } : {}),
+        totals: result.totals,
+      },
+    });
+
+    return result;
   }
 
   async voidMarket(
     subredditId: SubredditId,
     marketId: MarketId,
     reason: string,
-    options?: { moderatorId?: UserId | null },
+    options?: { moderatorId?: UserId | null; moderatorUsername?: string | null },
   ): Promise<MarketSettlementResult> {
     const market = await this.markets.getById(subredditId, marketId);
     if (!market) {
@@ -263,9 +290,22 @@ export class MarketsService {
       mode: 'void',
       reason,
       ...(options?.moderatorId !== undefined ? { moderatorId: options.moderatorId } : {}),
+      ...(options?.moderatorUsername !== undefined
+        ? { moderatorUsername: options.moderatorUsername }
+        : {}),
     };
 
-    return this.settleMarket(subredditId, market, bets, settlementParams);
+    const result = await this.settleMarket(subredditId, market, bets, settlementParams);
+
+    await this.recordMarketAction(subredditId, {
+      moderatorId: options?.moderatorId ?? null,
+      moderatorUsername: options?.moderatorUsername ?? null,
+      action: 'VOID_MARKET',
+      marketId,
+      payload: { reason },
+    });
+
+    return result;
   }
 
   async publishMarket(
@@ -289,6 +329,7 @@ export class MarketsService {
 
     const metadataPatch: Record<string, unknown> = {
       publishedBy: options?.moderatorId ?? undefined,
+      publishedByUsername: options?.moderatorUsername ?? undefined,
       lastPublishedAt: timestamp,
     };
 
@@ -319,6 +360,18 @@ export class MarketsService {
       await this.scheduler.scheduleMarketClose(subredditId, marketId, { runAt });
     }
 
+    await this.recordMarketAction(subredditId, {
+      moderatorId: options?.moderatorId ?? null,
+      moderatorUsername: options?.moderatorUsername ?? null,
+      action: 'PUBLISH_MARKET',
+      marketId,
+      payload: {
+        autoCloseOverrideMinutes:
+          overrideMinutes !== undefined ? overrideMinutes : config.autoCloseGraceMinutes,
+        ...(overrideMinutes === null ? { autoCloseDisabled: true } : {}),
+      },
+    });
+
     return saved;
   }
 
@@ -337,10 +390,24 @@ export class MarketsService {
     }
     const internalOptions: CloseMarketInternalOptions =
       options && 'moderatorId' in options
-        ? { auto: false, moderatorId: options.moderatorId ?? null }
-        : { auto: false };
+        ? {
+            auto: false,
+            moderatorId: options.moderatorId ?? null,
+            moderatorUsername: options.moderatorUsername ?? null,
+          }
+        : { auto: false, moderatorId: null, moderatorUsername: null };
 
-    return this.closeMarketInternal(subredditId, market, internalOptions);
+    const updated = await this.closeMarketInternal(subredditId, market, internalOptions);
+
+    await this.recordMarketAction(subredditId, {
+      moderatorId: options?.moderatorId ?? null,
+      moderatorUsername: options?.moderatorUsername ?? null,
+      action: 'CLOSE_MARKET',
+      marketId,
+      payload: { mode: 'manual' },
+    });
+
+    return updated;
   }
 
   async autoCloseMarket(subredditId: SubredditId, marketId: MarketId): Promise<AutoCloseResult> {
@@ -362,6 +429,7 @@ export class MarketsService {
     const closed = await this.closeMarketInternal(subredditId, market, {
       auto: true,
       moderatorId: null,
+      moderatorUsername: null,
     });
     return { status: 'closed', market: closed } satisfies AutoCloseResult;
   }
@@ -484,6 +552,29 @@ export class MarketsService {
 
     const odds = potAgainst / sanitizedFor;
     return Number.parseFloat((1 + odds).toFixed(2));
+  }
+
+  private async recordMarketAction(
+    subredditId: SubredditId,
+    details: {
+      readonly moderatorId: UserId | null | undefined;
+      readonly moderatorUsername: string | null | undefined;
+      readonly action: ModeratorActionType;
+      readonly marketId: MarketId;
+      readonly payload?: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    if (!details.moderatorId) {
+      return;
+    }
+
+    await this.audit.recordAction(subredditId, {
+      performedBy: details.moderatorId,
+      performedByUsername: details.moderatorUsername ?? 'unknown',
+      action: details.action,
+      marketId: details.marketId,
+      payload: details.payload ?? {},
+    });
   }
 
   private async settleMarket(
@@ -680,9 +771,16 @@ export class MarketsService {
             params.resolution,
             timestamp,
             params.moderatorId,
+            params.moderatorUsername,
             params.notes,
           )
-        : this.buildVoidMarket(state.market, timestamp, params.moderatorId, params.reason);
+        : this.buildVoidMarket(
+            state.market,
+            timestamp,
+            params.moderatorId,
+            params.moderatorUsername,
+            params.reason,
+          );
 
     await this.markets.applyUpdate(tx, subredditId, state.market, updatedMarket);
 
@@ -726,6 +824,7 @@ export class MarketsService {
 
     if ('moderatorId' in options) {
       metadataPatch.closedBy = options.moderatorId ?? undefined;
+      metadataPatch.closedByUsername = options.moderatorUsername ?? undefined;
     }
 
     if (options.auto) {
@@ -898,10 +997,12 @@ export class MarketsService {
     resolution: BetSide,
     settledAt: string,
     moderatorId?: UserId | null,
+    moderatorUsername?: string | null,
     notes?: string,
   ): Market {
     const metadataPatch: Record<string, unknown | undefined> = {
       resolvedBy: moderatorId ?? undefined,
+      resolvedByUsername: moderatorUsername ?? undefined,
       resolutionNotes: notes,
       lastSettledAt: settledAt,
     };
@@ -921,10 +1022,12 @@ export class MarketsService {
     market: Market,
     settledAt: string,
     moderatorId?: UserId | null,
+    moderatorUsername?: string | null,
     reason?: string,
   ): Market {
     const metadataPatch: Record<string, unknown | undefined> = {
       voidedBy: moderatorId ?? undefined,
+      voidedByUsername: moderatorUsername ?? undefined,
       voidReason: reason,
       lastSettledAt: settledAt,
     };

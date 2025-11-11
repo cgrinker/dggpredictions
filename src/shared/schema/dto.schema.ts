@@ -13,6 +13,7 @@ import {
   SubredditIdSchema,
   UserIdSchema,
 } from './entities.schema.js';
+import { ModeratorActionSchema } from './moderation.schema.js';
 
 export const PaginationSchema = z
   .object({
@@ -155,6 +156,13 @@ export const LeaderboardResponseSchema = z
     asOf: ISODateStringSchema,
     entries: z.array(LeaderboardEntrySchema).readonly(),
     currentUser: LeaderboardEntrySchema.optional(),
+  })
+  .strict();
+
+export const AuditLogResponseSchema = z
+  .object({
+    actions: z.array(ModeratorActionSchema).readonly(),
+    fetchedAt: ISODateStringSchema,
   })
   .strict();
 

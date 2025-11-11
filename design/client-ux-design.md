@@ -178,3 +178,9 @@ src/client/
 - Push notifications (if platform exposes) for resolution updates.
 - Localization support (i18n) once required.
 - Dark mode theme depending on Reddit client settings (if accessible via Devvit). 
+
+## Implementation Progress (Nov 11, 2025)
+- ✅ Moderator lifecycle console (`MarketLifecyclePanel`) replaces the placeholder counter and wires publish/close actions to the API.
+- ✅ Client API and hook layer now expose typed helpers for lifecycle operations with optimistic UI feedback.
+- 🔄 Participant experiences (lobby, market detail, betting flows, wallet, leaderboard) still need to be built atop the shared hooks.
+- 🔄 Admin console screens for archival maintenance, audit review, and configuration remain outstanding.
