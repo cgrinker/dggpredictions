@@ -29,5 +29,8 @@
   },
   "triggers": {
     "onAppInstall": "/internal/on-app-install"
+  },
+  "dev": {
+    "subreddit": "dggpredictions_dev"
   }
 }

@@ -57,7 +57,7 @@ export const publishMarket = async (
   };
 
   const envelope = await apiFetch<ApiSuccessEnvelope<unknown>>(
-    `/internal/markets/${marketId}/publish`,
+    `/api/internal/markets/${marketId}/publish`,
     {
       method: 'POST',
       body: JSON.stringify(body),
@@ -69,7 +69,7 @@ export const publishMarket = async (
 
 export const closeMarket = async (marketId: string): Promise<ApiSuccessEnvelope<unknown>['data']> => {
   const envelope = await apiFetch<ApiSuccessEnvelope<unknown>>(
-    `/internal/markets/${marketId}/close`,
+    `/api/internal/markets/${marketId}/close`,
     {
       method: 'POST',
       body: JSON.stringify({ marketId }),
@@ -108,7 +108,7 @@ export const resolveMarket = async (
   payload: Pick<ResolveMarketRequest, 'resolution' | 'notes'>,
 ): Promise<ResolveMarketResult> => {
   const envelope = await apiFetch<ResolveMarketResponseEnvelope>(
-    `/internal/markets/${marketId}/resolve`,
+    `/api/internal/markets/${marketId}/resolve`,
     {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -119,4 +119,19 @@ export const resolveMarket = async (
     market: envelope.data,
     settlement: envelope.meta?.settlement ?? null,
   } satisfies ResolveMarketResult;
+};
+
+export const voidMarket = async (
+  marketId: string,
+  reason: string,
+): Promise<ApiSuccessEnvelope<unknown>['data']> => {
+  const envelope = await apiFetch<ApiSuccessEnvelope<unknown>>(
+    `/api/internal/markets/${marketId}/void`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ marketId, reason }),
+    },
+  );
+
+  return envelope.data;
 };

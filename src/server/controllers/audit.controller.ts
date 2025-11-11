@@ -21,7 +21,7 @@ export const registerAuditRoutes = (
   dependencies: AuditControllerDependencies,
 ): void => {
   router.get(
-    '/internal/audit/logs',
+    ['/internal/audit/logs', '/api/internal/audit/logs'],
     requireModerator,
     asyncHandler(async (req, res) => {
       const context = req.appContext;

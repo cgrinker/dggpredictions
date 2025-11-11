@@ -121,7 +121,7 @@ export const registerMarketRoutes = (
   );
 
   router.post(
-    '/internal/markets/:id/publish',
+    ['/internal/markets/:id/publish', '/api/internal/markets/:id/publish'],
     requireModerator,
     asyncHandler(async (req, res) => {
       const context = req.appContext;
@@ -157,7 +157,7 @@ export const registerMarketRoutes = (
   );
 
   router.post(
-    '/internal/markets/:id/close',
+    ['/internal/markets/:id/close', '/api/internal/markets/:id/close'],
     requireModerator,
     asyncHandler(async (req, res) => {
       const context = req.appContext;
@@ -182,7 +182,7 @@ export const registerMarketRoutes = (
   );
 
   router.post(
-    '/internal/markets/:id/resolve',
+    ['/internal/markets/:id/resolve', '/api/internal/markets/:id/resolve'],
     requireModerator,
     asyncHandler(async (req, res) => {
       const context = req.appContext;
@@ -210,7 +210,7 @@ export const registerMarketRoutes = (
   );
 
   router.post(
-    '/internal/markets/:id/void',
+    ['/internal/markets/:id/void', '/api/internal/markets/:id/void'],
     requireModerator,
     asyncHandler(async (req, res) => {
       const context = req.appContext;
@@ -237,7 +237,7 @@ export const registerMarketRoutes = (
   );
 
   router.post(
-    '/internal/markets/archive',
+    ['/internal/markets/archive', '/api/internal/markets/archive'],
     requireModerator,
     asyncHandler(async (req, res) => {
       const context = req.appContext;

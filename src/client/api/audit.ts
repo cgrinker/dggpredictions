@@ -20,6 +20,6 @@ const buildQuery = (options?: GetAuditLogOptions): string => {
 
 export const getAuditLog = async (options?: GetAuditLogOptions): Promise<AuditLogResponse> => {
   const query = buildQuery(options);
-  const envelope = await apiFetch<AuditLogResponseEnvelope>(`/internal/audit/logs${query}`);
+  const envelope = await apiFetch<AuditLogResponseEnvelope>(`/api/internal/audit/logs${query}`);
   return envelope.data;
 };
