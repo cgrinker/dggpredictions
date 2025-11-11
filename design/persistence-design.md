@@ -162,4 +162,6 @@ Devvit Settings (per installation)
 - ✅ Balance/ledger helpers support atomic credit/debit workflows and ledger entry creation.
 - ✅ Ledger service now pushes positive ledger deltas into weekly/monthly/all-time leaderboard sorted sets.
 - ✅ Settlement and refund flows now run inside Redis transactions, updating balances, ledger entries, and clearing user pointers, with leaderboard resets intentionally left for manual moderation actions.
+- ✅ Added unit coverage around settlement and refund flows to detect regressions in payout math or pointer cleanup.
+- ✅ Scheduler repository/service now persist market-close job metadata around Devvit scheduler IDs, with tests covering schedule and cancel flows.
 - 🔄 Archival policies and scheduler coordination still pending.

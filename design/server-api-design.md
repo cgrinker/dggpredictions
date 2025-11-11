@@ -160,4 +160,6 @@ Errors raised by services should include machine-readable `code` (e.g., `MARKET_
 - ✅ Bet placement flow now enforces wager rules, single active bet per market, and creates ledger entries via transactional helper.
 - ✅ Ledger service now rolls positive ledger deltas into leaderboard sorted sets to keep standings fresh.
 - ✅ Moderator resolve/void endpoints now execute settlement payouts/refunds via transactional helpers while leaving leaderboard resets as a manual process.
+- ✅ Vitest suite now covers happy-path settlement and void flows to guard against payout/regression issues.
+- ✅ Scheduler service and repository scaffolded to schedule/cancel market-close jobs via Devvit scheduler with accompanying unit tests.
 - 🔄 Moderator-focused controllers plus scheduler-triggered handlers remain to be implemented.
