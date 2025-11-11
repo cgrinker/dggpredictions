@@ -16,6 +16,7 @@ import { BetRepository } from '../repositories/bet.repository.js';
 import { ConfigService } from './config.service.js';
 import { BalanceRepository } from '../repositories/balance.repository.js';
 import { LedgerService } from './ledger.service.js';
+import { SchedulerService } from './scheduler.service.js';
 import { createMarketId } from '../utils/id.js';
 import { nowIso } from '../utils/time.js';
 import type { CreateMarketRequest } from '../../shared/types/dto.js';
@@ -56,6 +57,15 @@ type VoidSettlementParams = {
 
 type SettlementParams = ResolveSettlementParams | VoidSettlementParams;
 
+type PublishMarketOptions = {
+  readonly moderatorId?: UserId | null;
+  readonly autoCloseOverrideMinutes?: number | null;
+};
+
+type CloseMarketOptions = {
+  readonly moderatorId?: UserId | null;
+};
+
 interface ListMarketsOptions {
   readonly status?: MarketStatus;
   readonly page?: number;
@@ -67,6 +77,7 @@ export class MarketsService {
   private readonly bets: BetRepository;
   private readonly balances: BalanceRepository;
   private readonly ledger: LedgerService;
+  private readonly scheduler: SchedulerService;
   private readonly config: ConfigService;
 
   constructor(
@@ -74,12 +85,14 @@ export class MarketsService {
     bets = new BetRepository(),
     balances = new BalanceRepository(),
     ledger = new LedgerService(),
+    scheduler = new SchedulerService(),
     config = new ConfigService(),
   ) {
     this.markets = markets;
     this.bets = bets;
     this.balances = balances;
     this.ledger = ledger;
+    this.scheduler = scheduler;
     this.config = config;
   }
 
@@ -226,6 +239,93 @@ export class MarketsService {
     };
 
     return this.settleMarket(subredditId, market, bets, settlementParams);
+  }
+
+  async publishMarket(
+    subredditId: SubredditId,
+    marketId: MarketId,
+    options?: PublishMarketOptions,
+  ): Promise<Market> {
+    const market = await this.markets.getById(subredditId, marketId);
+    if (!market) {
+      throw new NotFoundError(`Market ${marketId} not found.`);
+    }
+
+    if (market.status !== 'draft') {
+      throw new ValidationError('Only draft markets can be published.');
+    }
+
+    this.ensureCloseTimeIsValid(market.closesAt);
+
+    const config = await this.config.getConfig(subredditId);
+    const timestamp = nowIso();
+
+    const metadataPatch: Record<string, unknown> = {
+      publishedBy: options?.moderatorId ?? undefined,
+      lastPublishedAt: timestamp,
+    };
+
+    const overrideMinutes = this.normalizeAutoCloseOverride(options?.autoCloseOverrideMinutes);
+    if (overrideMinutes !== undefined) {
+      metadataPatch.autoCloseOverrideMinutes = overrideMinutes;
+    }
+
+    await this.scheduler.cancelMarketClose(subredditId, marketId);
+
+    const updated = this.applyMarketPatch(
+      market,
+      {
+        status: 'open',
+        resolvedAt: null,
+        resolution: null,
+      },
+      metadataPatch,
+    );
+
+    const saved = await this.markets.save(subredditId, updated);
+
+    const runAt = this.calculateAutoCloseTime(
+      saved.closesAt,
+      overrideMinutes !== undefined ? overrideMinutes : config.autoCloseGraceMinutes,
+    );
+    if (runAt) {
+      await this.scheduler.scheduleMarketClose(subredditId, marketId, { runAt });
+    }
+
+    return saved;
+  }
+
+  async closeMarket(
+    subredditId: SubredditId,
+    marketId: MarketId,
+    options?: CloseMarketOptions,
+  ): Promise<Market> {
+    const market = await this.markets.getById(subredditId, marketId);
+    if (!market) {
+      throw new NotFoundError(`Market ${marketId} not found.`);
+    }
+
+    if (market.status !== 'open') {
+      throw new ValidationError('Only open markets can be closed.');
+    }
+
+    await this.scheduler.cancelMarketClose(subredditId, marketId);
+
+    const timestamp = nowIso();
+    const metadataPatch: Record<string, unknown> = {
+      closedBy: options?.moderatorId ?? undefined,
+      lastClosedAt: timestamp,
+    };
+
+    const updated = this.applyMarketPatch(
+      market,
+      {
+        status: 'closed',
+      },
+      metadataPatch,
+    );
+
+    return this.markets.save(subredditId, updated);
   }
 
   private ensureCloseTimeIsValid(raw: string) {
@@ -612,5 +712,36 @@ export class MarketsService {
     }
 
     return candidate as Market;
+  }
+
+  private normalizeAutoCloseOverride(value?: number | null): number | null | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+
+    if (value === null) {
+      return null;
+    }
+
+    return value;
+  }
+
+  private calculateAutoCloseTime(closesAt: string, minutes: number | null): Date | null {
+    const closeTime = Date.parse(closesAt);
+    if (Number.isNaN(closeTime)) {
+      return null;
+    }
+
+    if (minutes === null) {
+      return null;
+    }
+
+    const grace = minutes ?? 0;
+    const runAtMillis = closeTime + Math.max(0, grace) * 60_000;
+    if (runAtMillis <= Date.now()) {
+      return null;
+    }
+
+    return new Date(runAtMillis);
   }
 }

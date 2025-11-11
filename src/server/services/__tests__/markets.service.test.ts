@@ -9,11 +9,13 @@ import type {
   UserBalance,
   UserId,
 } from '../../../shared/types/entities.js';
+import type { AppConfig } from '../../../shared/types/config.js';
 import type { MarketRepository } from '../../repositories/market.repository.js';
 import type { BetRepository } from '../../repositories/bet.repository.js';
 import type { BalanceRepository } from '../../repositories/balance.repository.js';
 import type { LedgerService } from '../ledger.service.js';
 import type { ConfigService } from '../config.service.js';
+import type { SchedulerService } from '../scheduler.service.js';
 
 const runTransactionMock = vi.fn();
 
@@ -88,7 +90,11 @@ beforeEach(() => {
   runTransactionMock.mockClear();
 });
 
-const setupService = (options?: { marketOverrides?: Partial<Market> }) => {
+const setupService = (options?: {
+  marketOverrides?: Partial<Market>;
+  configOverrides?: Partial<AppConfig>;
+  schedulerOverrides?: Partial<SchedulerService>;
+}) => {
   const market = createMarket(options?.marketOverrides ?? {});
   const yesBet = createBet({ side: 'yes' });
   const noBet = createBet({ side: 'no' });
@@ -97,6 +103,7 @@ const setupService = (options?: { marketOverrides?: Partial<Market> }) => {
     getById: vi.fn().mockResolvedValue(market),
     applyUpdate: vi.fn().mockResolvedValue(undefined),
     clearUserBetPointer: vi.fn().mockResolvedValue(undefined),
+    save: vi.fn().mockImplementation(async (_subredditId: SubredditId, candidate: Market) => candidate),
   };
 
   const betRepo: Partial<BetRepository> = {
@@ -112,13 +119,38 @@ const setupService = (options?: { marketOverrides?: Partial<Market> }) => {
     record: vi.fn().mockResolvedValue(undefined),
   };
 
-  const configService: Partial<ConfigService> = {};
+  const baseConfig: AppConfig = {
+    startingBalance: 1_000,
+    minBet: 1,
+    maxBet: null,
+    maxOpenMarkets: null,
+    leaderboardWindow: 'weekly',
+    autoCloseGraceMinutes: 5,
+    featureFlags: {
+      maintenanceMode: false,
+      enableRealtimeUpdates: true,
+      enableLeaderboard: true,
+    },
+  };
+
+  const configService: Partial<ConfigService> = {
+    getConfig: vi.fn().mockResolvedValue({ ...baseConfig, ...(options?.configOverrides ?? {}) }),
+  };
+
+  const schedulerService: Partial<SchedulerService> = {
+    cancelMarketClose: vi.fn().mockResolvedValue(undefined),
+    scheduleMarketClose: vi.fn().mockResolvedValue('job-123'),
+    getMarketCloseJob: vi.fn().mockResolvedValue(null),
+  };
+
+  Object.assign(schedulerService, options?.schedulerOverrides);
 
   const service = new MarketsServiceClass(
     marketRepo as MarketRepository,
     betRepo as BetRepository,
     balanceRepo as BalanceRepository,
     ledgerService as LedgerService,
+    schedulerService as SchedulerService,
     configService as ConfigService,
   );
 
@@ -131,7 +163,18 @@ const setupService = (options?: { marketOverrides?: Partial<Market> }) => {
     ]),
   };
 
-  return { service, marketRepo, betRepo, balanceRepo, ledgerService, yesBet, noBet };
+  return {
+    service,
+    marketRepo,
+    betRepo,
+    balanceRepo,
+    ledgerService,
+    schedulerService,
+    configService,
+    market,
+    yesBet,
+    noBet,
+  };
 };
 
 describe('MarketsService settlement', () => {
@@ -154,7 +197,7 @@ describe('MarketsService settlement', () => {
     expect(response.totals.totalPayout).toBeGreaterThan(0);
 
     expect(balanceRepo.applySnapshot).toHaveBeenCalledTimes(1);
-  const snapshot = (balanceRepo.applySnapshot as VitestMock).mock.calls[0][1] as UserBalance;
+    const snapshot = (balanceRepo.applySnapshot as VitestMock).mock.calls[0][1] as UserBalance;
     expect(snapshot.balance).toBeGreaterThan(0);
 
     expect(ledgerService.record).toHaveBeenCalledTimes(1);
@@ -221,5 +264,76 @@ describe('MarketsService settlement', () => {
       expect.anything(),
       expect.objectContaining({ status: 'void' }),
     );
+  });
+});
+
+describe('MarketsService lifecycle', () => {
+  const subredditId = 'sub-1' as SubredditId;
+  const marketId = 'market-1' as MarketId;
+
+  it('publishes a draft market and schedules auto-close job', async () => {
+    const closesAtDate = new Date(Date.now() + 60 * 60 * 1_000);
+    const closesAt = closesAtDate.toISOString();
+    const moderatorId = 'mod-22' as UserId;
+
+    const { service, schedulerService, marketRepo } = setupService({
+      marketOverrides: { status: 'draft', closesAt },
+    });
+
+    const result = await service.publishMarket(subredditId, marketId, { moderatorId });
+
+    expect(result.status).toBe('open');
+    expect(result.metadata?.publishedBy).toBe(moderatorId);
+    expect(result.metadata?.lastPublishedAt).toBeDefined();
+    expect(result.metadata?.autoCloseOverrideMinutes).toBeUndefined();
+
+    expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
+
+    const scheduleCalls = (schedulerService.scheduleMarketClose as VitestMock).mock.calls;
+    expect(scheduleCalls).toHaveLength(1);
+    expect(scheduleCalls[0][0]).toBe(subredditId);
+    expect(scheduleCalls[0][1]).toBe(marketId);
+    const scheduledRunAt = scheduleCalls[0][2].runAt as Date;
+  const expectedRunAt = new Date(closesAtDate.getTime() + 5 * 60_000);
+    expect(scheduledRunAt.toISOString()).toBe(expectedRunAt.toISOString());
+
+    const savedMarket = (marketRepo.save as VitestMock).mock.calls[0][1] as Market;
+    expect(savedMarket.status).toBe('open');
+  });
+
+  it('does not schedule auto-close when override disables it', async () => {
+    const closesAt = new Date(Date.now() + 90 * 60 * 1_000).toISOString();
+
+    const { service, schedulerService } = setupService({
+      marketOverrides: { status: 'draft', closesAt },
+    });
+
+    const result = await service.publishMarket(subredditId, marketId, {
+      autoCloseOverrideMinutes: null,
+    });
+
+    expect(result.status).toBe('open');
+    expect(result.metadata?.autoCloseOverrideMinutes).toBeNull();
+    expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
+    expect(schedulerService.scheduleMarketClose).not.toHaveBeenCalled();
+  });
+
+  it('closes an open market and cancels outstanding job', async () => {
+    const moderatorId = 'mod-33' as UserId;
+
+    const { service, schedulerService, marketRepo } = setupService({
+      marketOverrides: { status: 'open' },
+    });
+
+    const result = await service.closeMarket(subredditId, marketId, { moderatorId });
+
+    expect(result.status).toBe('closed');
+    expect(result.metadata?.closedBy).toBe(moderatorId);
+    expect(result.metadata?.lastClosedAt).toBeDefined();
+    expect(schedulerService.cancelMarketClose).toHaveBeenCalledWith(subredditId, marketId);
+    expect(schedulerService.scheduleMarketClose).not.toHaveBeenCalled();
+
+    const savedMarket = (marketRepo.save as VitestMock).mock.calls[0][1] as Market;
+    expect(savedMarket.status).toBe('closed');
   });
 });
