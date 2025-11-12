@@ -214,6 +214,56 @@ const AUDIT_FILTER_OPTIONS: ReadonlyArray<{
   },
 ];
 
+const formatBytes = (value: number): string => {
+  if (!Number.isFinite(value) || value <= 0) {
+    return '0 B';
+  }
+
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = value;
+  let index = 0;
+
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024;
+    index += 1;
+  }
+
+  const precision = index === 0 ? 0 : 1;
+  return `${size.toFixed(precision)} ${units[index]}`;
+};
+
+type MetricCardConfig = {
+  readonly key: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly format?: (value: number) => string;
+  readonly accent?: 'primary' | 'warning';
+};
+
+const METRIC_CARD_CONFIG: ReadonlyArray<MetricCardConfig> = [
+  { key: 'totalMarkets', label: 'Total Markets', accent: 'primary' },
+  { key: 'openMarkets', label: 'Open Markets' },
+  { key: 'closedMarkets', label: 'Closed Markets' },
+  { key: 'resolvedMarkets', label: 'Resolved Markets' },
+  { key: 'archivableMarkets', label: 'Archivable Markets', description: 'Closed, resolved, and void totals awaiting purge.' },
+  { key: 'draftMarkets', label: 'Draft Markets' },
+  { key: 'voidMarkets', label: 'Voided Markets' },
+  { key: 'redisTotalKeys', label: 'Redis Keys', description: 'Namespace footprint across metrics and markets.' },
+  { key: 'redisUsedMemoryBytes', label: 'Redis Memory', format: (value) => formatBytes(value), description: 'Current in-memory usage for the namespace.' },
+  { key: 'redisPeakMemoryBytes', label: 'Redis Peak Memory', format: (value) => formatBytes(value), description: 'Historical peak in-memory usage.' },
+];
+
+const METRIC_CARD_KEYS = new Set(METRIC_CARD_CONFIG.map((card) => card.key));
+
+const MAINTENANCE_REFRESH_MS = 60_000;
+
+const formatMetricValue = (value: number, format?: (input: number) => string): string => {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+  return format ? format(value) : value.toLocaleString();
+};
+
 interface ArchiveFormState {
   readonly olderThanDays: string;
   readonly statuses: Set<'closed' | 'resolved' | 'void'>;
@@ -468,6 +518,18 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
       void loadMaintenanceData();
     }
   }, [activeTab, maintenanceInitialized, loadMaintenanceData]);
+
+  useEffect(() => {
+    if (activeTab !== 'maintenance') {
+      return undefined;
+    }
+
+    const refreshTimer = window.setInterval(() => {
+      void loadMaintenanceData();
+    }, MAINTENANCE_REFRESH_MS);
+
+    return () => window.clearInterval(refreshTimer);
+  }, [activeTab, loadMaintenanceData]);
 
   const submitArchive = useCallback(
     async (dryRun: boolean) => {
@@ -1221,12 +1283,15 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
 
   const renderMaintenanceTab = () => {
     const metrics = metricsState.data;
-    const metricsCounters: Array<[string, number]> = metrics
-      ? (Object.entries(metrics.counters) as Array<[string, number]>)
-      : [];
+    const counters = metrics?.counters ?? {};
+    const knownMetricCards = METRIC_CARD_CONFIG.filter((card) => counters[card.key] !== undefined);
+    const extraMetricEntries: Array<[string, number]> = Object.entries(counters).filter(
+      ([key]) => !METRIC_CARD_KEYS.has(key),
+    );
   const incidents: ReadonlyArray<IncidentSummary> = incidentsState.data?.incidents ?? [];
-    const incidentsLoading = incidentsState.loading && incidents.length === 0;
-    const metricsLoading = metricsState.loading && metricsCounters.length === 0;
+  const incidentsLoading = incidentsState.loading && incidents.length === 0;
+  const noMetricsAvailable = knownMetricCards.length === 0 && extraMetricEntries.length === 0;
+  const metricsLoading = metricsState.loading && noMetricsAvailable;
     const maintenanceLoading = metricsState.loading || incidentsState.loading;
 
     return (
@@ -1235,7 +1300,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold theme-heading">Maintenance &amp; Operations</h2>
             <p className="text-sm theme-subtle">
-              Monitor backend health, review incidents, and manage archival tooling verified against the live endpoints.
+              Monitor backend health, review incidents, and manage archival tooling verified against the live endpoints. Metrics auto-refresh every minute while this tab remains open.
             </p>
           </div>
           <button
@@ -1273,17 +1338,46 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             <p className="text-sm theme-subtle">Loading metrics…</p>
           ) : metricsState.error ? (
             <p className="rounded px-3 py-2 text-sm feedback-error">{metricsState.error}</p>
-          ) : metricsCounters.length === 0 ? (
+          ) : knownMetricCards.length === 0 && extraMetricEntries.length === 0 ? (
             <p className="text-sm theme-subtle">No counters currently exposed by the backend.</p>
           ) : (
-            <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {metricsCounters.map(([name, value]) => (
-                <div key={name} className="rounded border theme-border px-4 py-3">
-                  <dt className="text-xs font-medium uppercase tracking-wide theme-subtle">{name}</dt>
-                  <dd className="text-lg font-semibold theme-heading">{value}</dd>
+            <div className="flex flex-col gap-4">
+              {knownMetricCards.length > 0 && (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {knownMetricCards.map((card) => {
+                    const raw = counters[card.key] ?? 0;
+                    const valueText = formatMetricValue(raw, card.format);
+                    const valueClass = card.accent === 'primary' ? 'text-2xl' : 'text-xl';
+                    return (
+                      <div
+                        key={card.key}
+                        className="rounded border theme-border px-4 py-3"
+                        style={card.accent === 'primary' ? { backgroundColor: 'var(--surface-muted)' } : undefined}
+                      >
+                        <dt className="text-xs font-medium uppercase tracking-wide theme-subtle">
+                          {card.label}
+                        </dt>
+                        <dd className={`${valueClass} font-semibold theme-heading`}>{valueText}</dd>
+                        {card.description && (
+                          <p className="text-xs theme-muted">{card.description}</p>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </dl>
+              )}
+
+              {extraMetricEntries.length > 0 && (
+                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {extraMetricEntries.map(([name, value]) => (
+                    <div key={name} className="rounded border theme-border px-4 py-3">
+                      <dt className="text-xs font-medium uppercase tracking-wide theme-subtle">{name}</dt>
+                      <dd className="text-lg font-semibold theme-heading">{value.toLocaleString()}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </div>
           )}
         </section>
 

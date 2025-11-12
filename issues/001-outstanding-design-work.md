@@ -53,8 +53,8 @@ Tracked from the latest review of the design documents (2025-11-11).
 	- [x] Introduce audit filter for `ARCHIVE_MARKETS`, `CONFIG_UPDATE`, incident resolutions.
 
 ## Observability, Operations & Testing
-- [ ] Ship metrics counters and incident surfacing in the moderator console.
-	- [ ] Implement Redis-backed counters; expose `/internal/metrics/summary`.
-- [ ] Codify deployment automation and regression checklists/playbooks for staging→production.
-	- [ ] Author `docs/playbook-deploy.md` with smoke checklist.
-	- [ ] Create regression test suite (scripted) for Playtest environment.
+- [x] Ship metrics counters and incident surfacing in the moderator console.
+	- [x] Implement Redis-backed counters; expose `/internal/metrics/summary`.
+- [x] Codify deployment automation and regression checklists/playbooks for staging→production.
+	- [x] Author `docs/playbook-deploy.md` with smoke checklist.
+	- [x] Create regression test suite (scripted) for Playtest environment.

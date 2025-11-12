@@ -66,4 +66,6 @@ export const auditKeys = {
 
 export const metricsKeys = {
   storage: () => concat(REDIS_NAMESPACE, 'metrics', 'storage'),
+  counters: (subredditId: SubredditId) => base('metrics', subredditId, 'counters'),
+  incidents: (subredditId: SubredditId) => base('metrics', subredditId, 'incidents'),
 };
