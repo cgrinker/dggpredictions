@@ -109,6 +109,48 @@ describe('MarketsController archive route', () => {
     expect(options.moderatorId).toBe(defaultContext.userId);
   });
 
+  it('supports dry-run mode for archive requests', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2025-03-10T12:00:00.000Z');
+    vi.setSystemTime(now);
+
+    const archiveResult = {
+      processedMarkets: 12,
+      archivedMarkets: 0,
+      skippedMarkets: 12,
+      cutoffIso: '2025-02-08T12:00:00.000Z',
+      dryRun: true,
+    };
+
+    const { dependencies, marketsService } = createDependencies();
+    (marketsService.archiveMarkets as VitestMock).mockResolvedValue(archiveResult);
+
+    const app = createApp(dependencies, {});
+    const agent: SuperTest<SupertestRequest> = supertest(app);
+
+    const response = await agent
+      .post('/internal/markets/archive')
+      .send({
+        olderThanDays: 30,
+        statuses: ['closed'],
+        dryRun: true,
+      })
+      .expect(200);
+
+    expect(response.body.data).toEqual(archiveResult);
+
+    expect(marketsService.archiveMarkets).toHaveBeenCalledTimes(1);
+    const callArgs = (marketsService.archiveMarkets as VitestMock).mock.calls[0];
+    expect(callArgs[0]).toBe(defaultContext.subredditId);
+
+    const options = callArgs[1] as Parameters<MarketsService['archiveMarkets']>[1];
+    const expectedCutoff = new Date(now.getTime() - 30 * 86_400_000);
+    expect(options.cutoff.toISOString()).toBe(expectedCutoff.toISOString());
+    expect(options.statuses).toEqual(['closed']);
+    expect(options.dryRun).toBe(true);
+    expect(options.moderatorId).toBe(defaultContext.userId);
+  });
+
   it('rejects invalid payloads with validation error', async () => {
     const { dependencies, marketsService } = createDependencies();
     const app = createApp(dependencies, {});

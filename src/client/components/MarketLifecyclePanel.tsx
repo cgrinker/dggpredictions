@@ -1050,10 +1050,10 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
     return (
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold theme-heading">Maintenance &amp; Operations</h2>
             <p className="text-sm theme-subtle">
-              Access system metrics, review incidents, and run archival tooling.
+              Monitor backend health, review incidents, and manage archival tooling verified against the live endpoints.
             </p>
           </div>
           <button
@@ -1078,19 +1078,21 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
 
         {archiveError && <div className="rounded px-4 py-3 text-sm feedback-error">{archiveError}</div>}
 
-        <section className="rounded-2xl theme-card p-6 flex flex-col gap-4">
+        <section className="rounded-2xl theme-card p-6 flex flex-col gap-5">
           <div>
             <h3 className="text-lg font-semibold theme-heading">System Metrics</h3>
             <p className="text-sm theme-subtle">
-              {metrics?.updatedAt ? `Updated ${formatDateTime(metrics.updatedAt)}.` : 'No metrics captured yet.'}
+              {metrics?.updatedAt
+                ? `Snapshot refreshed ${formatDateTime(metrics.updatedAt)}.`
+                : 'No metrics reported by the backend yet.'}
             </p>
           </div>
           {metricsLoading ? (
             <p className="text-sm theme-subtle">Loading metrics…</p>
           ) : metricsState.error ? (
-            <p className="text-sm feedback-error px-3 py-2 rounded">{metricsState.error}</p>
+            <p className="rounded px-3 py-2 text-sm feedback-error">{metricsState.error}</p>
           ) : metricsCounters.length === 0 ? (
-            <p className="text-sm theme-subtle">No counters reported by the backend.</p>
+            <p className="text-sm theme-subtle">No counters currently exposed by the backend.</p>
           ) : (
             <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {metricsCounters.map(([name, value]) => (
@@ -1103,7 +1105,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
           )}
         </section>
 
-        <section className="rounded-2xl theme-card p-6 flex flex-col gap-4">
+        <section className="rounded-2xl theme-card p-6 flex flex-col gap-5">
           <div>
             <h3 className="text-lg font-semibold theme-heading">Incident Feed</h3>
             <p className="text-sm theme-subtle">
@@ -1135,11 +1137,11 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
           )}
         </section>
 
-        <section className="rounded-2xl theme-card p-6 flex flex-col gap-4">
+        <section className="rounded-2xl theme-card p-6 flex flex-col gap-5">
           <div>
             <h3 className="text-lg font-semibold theme-heading">Archive Markets</h3>
             <p className="text-sm theme-subtle">
-              Run dry-runs before executing archivals to understand impact. Dry-run output surfaces the candidate set.
+              Dry-run to preview impact, then archive to remove aged markets immediately once you are confident in the filters below.
             </p>
           </div>
 
@@ -1167,7 +1169,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             </label>
           </div>
 
-          <fieldset className="flex flex-col gap-2">
+          <fieldset className="flex flex-col gap-3">
             <legend className="text-sm font-semibold theme-heading">Include statuses</legend>
             <div className="flex flex-wrap gap-3">
               {ARCHIVE_STATUS_OPTIONS.map((option) => (
@@ -1184,7 +1186,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             </div>
           </fieldset>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
               className="btn-base btn-secondary px-4 py-2 text-sm"
@@ -1212,16 +1214,28 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
           </div>
 
           {archiveResult && (
-            <div className="rounded border theme-border px-4 py-3 text-sm">
+            <div className="rounded border theme-border px-4 py-4 text-sm flex flex-col gap-2">
               <p className="font-semibold theme-heading">
                 {archiveResult.dryRun ? 'Dry-run results' : 'Archive completed'}
               </p>
-              <ul className="mt-2 list-disc pl-5 theme-muted text-sm">
-                <li>Processed {archiveResult.processedMarkets} market(s)</li>
-                <li>Eligible to archive: {archiveResult.archivedMarkets}</li>
-                <li>Skipped: {archiveResult.skippedMarkets}</li>
-                <li>Cutoff: {formatDateTime(archiveResult.cutoffIso)}</li>
-              </ul>
+              <dl className="grid grid-cols-1 gap-y-1 text-sm theme-muted sm:grid-cols-2">
+                <div>
+                  <dt className="text-xs uppercase tracking-wide theme-subtle">Processed</dt>
+                  <dd>{archiveResult.processedMarkets} market(s)</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide theme-subtle">Eligible</dt>
+                  <dd>{archiveResult.archivedMarkets}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide theme-subtle">Skipped</dt>
+                  <dd>{archiveResult.skippedMarkets}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs uppercase tracking-wide theme-subtle">Cutoff</dt>
+                  <dd>{formatDateTime(archiveResult.cutoffIso)}</dd>
+                </div>
+              </dl>
             </div>
           )}
         </section>
@@ -1235,10 +1249,10 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
     return (
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold theme-heading">Configuration Overrides</h2>
             <p className="text-sm theme-subtle">
-              Inspect live configuration and optionally apply override values through Redis.
+              Review the live Devvit settings snapshot and push overrides to Redis when runtime tweaks are needed.
             </p>
           </div>
           <button
@@ -1258,8 +1272,8 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             }`}
           >
             {configOverridesApplied
-              ? 'Override values are currently applied. Saving or resetting updates Redis state immediately.'
-              : 'No Redis overrides detected. Live config matches defaults.'}
+              ? 'Override values are active. Saving or resetting updates the Redis snapshot immediately.'
+              : 'No Redis overrides detected. Live config matches the Devvit defaults.'}
           </div>
         )}
 
@@ -1271,7 +1285,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
 
         {configLoaded ? (
           <form
-            className="rounded-2xl theme-card p-6 flex flex-col gap-4"
+            className="rounded-2xl theme-card p-6 flex flex-col gap-5"
             onSubmit={(event) => {
               event.preventDefault();
               void handleConfigSave();
@@ -1350,11 +1364,11 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
 
             {!configEditorEnabled && (
               <div className="rounded px-3 py-2 text-xs feedback-warning">
-                The config editor is disabled. Toggle the feature flag below and save changes to unlock numeric inputs.
+                Enable the config editor flag below and save to unlock editable numeric inputs.
               </div>
             )}
 
-            <fieldset className="flex flex-col gap-2">
+            <fieldset className="flex flex-col gap-3">
               <legend className="text-sm font-semibold theme-heading">Feature flags</legend>
               <div className="flex flex-col gap-2">
                 {FEATURE_FLAG_OPTIONS.map((flag) => (
@@ -1366,16 +1380,16 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
                       onChange={handleFeatureFlagToggle(flag.key)}
                       disabled={configSaving}
                     />
-                    <span>
+                    <span className="flex flex-col gap-0.5">
                       <span className="font-semibold theme-heading text-sm">{flag.label}</span>
-                      <span className="block text-xs theme-subtle">{flag.description}</span>
+                      <span className="text-xs theme-subtle">{flag.description}</span>
                     </span>
                   </label>
                 ))}
               </div>
             </fieldset>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="submit"
                 className="btn-base btn-primary px-4 py-2 text-sm"
@@ -1394,7 +1408,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             </div>
           </form>
         ) : (
-          <section className="rounded-2xl theme-card p-6 flex flex-col gap-3">
+          <section className="rounded-2xl theme-card p-6 flex flex-col gap-4">
             <p className="text-sm theme-subtle">
               Configuration has not been loaded yet. Use the button above to fetch the live snapshot.
             </p>
