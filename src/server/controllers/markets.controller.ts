@@ -42,6 +42,15 @@ const schedulerCloseBodySchema = z
   })
   .strict();
 
+const schedulerPruneBodySchema = z
+  .object({
+    subredditId: SubredditIdSchema,
+    olderThanDays: z.number().int().min(1).max(365),
+    maxMarkets: z.number().int().min(1).max(5_000).optional(),
+    statuses: z.array(MarketStatusSchema).min(1).optional(),
+  })
+  .strict();
+
 export interface MarketControllerDependencies {
   readonly marketsService: MarketsService;
   readonly betsService: BetsService;
@@ -337,6 +346,33 @@ export const registerMarketRoutes = (
         data: result.market ?? null,
         meta: { status: 'skipped', reason: result.reason ?? 'unknown' },
       });
+    }),
+  );
+
+  router.post(
+    '/internal/scheduler/market-prune',
+    asyncHandler(async (req, res) => {
+      const payload = ensureValid(
+        schedulerPruneBodySchema,
+        typeof req.body === 'object' && req.body !== null ? req.body : {},
+        'Invalid prune payload.',
+      );
+
+      const cutoff = new Date(Date.now() - payload.olderThanDays * 86_400_000);
+      const pruneOptions = {
+        cutoff,
+        ...(payload.maxMarkets !== undefined ? { maxMarkets: payload.maxMarkets } : {}),
+        ...(payload.statuses !== undefined ? { statuses: payload.statuses } : {}),
+        moderatorId: null,
+        moderatorUsername: null,
+      } satisfies Parameters<MarketsService['pruneArchivedMarkets']>[1];
+
+      const result = await dependencies.marketsService.pruneArchivedMarkets(
+        payload.subredditId,
+        pruneOptions,
+      );
+
+      res.json({ data: result });
     }),
   );
 };

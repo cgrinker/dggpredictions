@@ -130,6 +130,22 @@ interface ArchiveActor {
   readonly source: 'moderator' | 'system';
 }
 
+interface PruneMarketsOptions {
+  readonly cutoff: Date;
+  readonly maxMarkets?: number;
+  readonly statuses?: ReadonlyArray<MarketStatus>;
+  readonly moderatorId?: UserId | null;
+  readonly moderatorUsername?: string | null;
+}
+
+interface PruneMarketsResult {
+  readonly processedMarkets: number;
+  readonly prunedMarkets: number;
+  readonly skippedMarkets: number;
+  readonly cutoffIso: string;
+  readonly prunedIds: readonly MarketId[];
+}
+
 export class MarketsService {
   private readonly markets: MarketRepository;
   private readonly bets: BetRepository;
@@ -607,6 +623,110 @@ export class MarketsService {
     } satisfies ArchiveMarketsResult;
   }
 
+  async pruneArchivedMarkets(subredditId: SubredditId, options: PruneMarketsOptions): Promise<PruneMarketsResult> {
+    const statuses = this.normalizeArchivableStatuses(options.statuses);
+    if (statuses.length === 0) {
+      throw new ValidationError('No prunable statuses provided.');
+    }
+
+    const cutoffMillis = options.cutoff.getTime();
+    const actor = this.resolveArchiveActor(options.moderatorId ?? null, options.moderatorUsername ?? null);
+    const maxPrunes = options.maxMarkets ?? Number.POSITIVE_INFINITY;
+    const shouldLimit = Number.isFinite(maxPrunes);
+    const maxCount = shouldLimit ? Number(maxPrunes) : Number.POSITIVE_INFINITY;
+
+    let processedCount = 0;
+    let prunedCount = 0;
+    let skippedCount = 0;
+    const prunedIds: MarketId[] = [];
+
+    let stopProcessing = false;
+
+    for (const status of statuses) {
+      if (stopProcessing) {
+        break;
+      }
+
+      let statusPage = 1;
+      const chunkSize = shouldLimit
+        ? Math.max(1, Math.min(200, Math.ceil(maxCount - prunedCount)))
+        : 200;
+
+      while (!stopProcessing) {
+        const { markets } = await this.markets.list(subredditId, {
+          status,
+          page: statusPage,
+          pageSize: chunkSize,
+        });
+
+        if (markets.length === 0) {
+          break;
+        }
+
+        for (const market of markets) {
+          if (prunedCount >= maxCount) {
+            stopProcessing = true;
+            break;
+          }
+
+          processedCount += 1;
+
+          const archivedAtMillis = this.getArchivedTimestamp(market);
+          if (archivedAtMillis === null || archivedAtMillis > cutoffMillis) {
+            skippedCount += 1;
+            continue;
+          }
+
+          const bets = await this.bets.listByMarket(subredditId, market.id);
+          await this.deleteArchivedMarket(subredditId, market, bets);
+          prunedCount += 1;
+          prunedIds.push(market.id);
+        }
+
+        if (!stopProcessing && prunedCount >= maxCount) {
+          stopProcessing = true;
+        }
+
+        if (stopProcessing) {
+          break;
+        }
+
+        if (markets.length < chunkSize) {
+          break;
+        }
+
+        statusPage += 1;
+      }
+    }
+
+    if (prunedCount > 0) {
+      await this.audit.recordAction(subredditId, {
+        performedBy: actor.id,
+        performedByUsername: actor.username,
+        action: 'PRUNE_MARKETS',
+        marketId: null,
+        payload: {
+          prunedMarketIds: prunedIds,
+          prunedCount,
+          processedCount,
+          skippedCount,
+          cutoffIso: options.cutoff.toISOString(),
+          statuses,
+          actorType: actor.source,
+          maxMarkets: shouldLimit ? maxCount : null,
+        },
+      });
+    }
+
+    return {
+      processedMarkets: processedCount,
+      prunedMarkets: prunedCount,
+      skippedMarkets: skippedCount,
+      cutoffIso: options.cutoff.toISOString(),
+      prunedIds,
+    } satisfies PruneMarketsResult;
+  }
+
   private ensureCloseTimeIsValid(raw: string) {
     const closesAt = Date.parse(raw);
     if (Number.isNaN(closesAt)) {
@@ -1079,6 +1199,61 @@ export class MarketsService {
     );
   }
 
+  private async deleteArchivedMarket(
+    subredditId: SubredditId,
+    market: Market,
+    bets: readonly Bet[],
+  ): Promise<void> {
+    const watchKeys = new Set<string>();
+    const marketKey = marketKeys.record(subredditId, market.id);
+    const betIndexKey = marketKeys.betsIndex(subredditId, market.id);
+    const allIndexKey = marketKeys.indexAll(subredditId);
+    const statusIndexKey = marketKeys.indexByStatus(subredditId, market.status);
+    const schedulerKey = marketKeys.schedulerClose(subredditId, market.id);
+
+    watchKeys.add(marketKey);
+    watchKeys.add(betIndexKey);
+    watchKeys.add(allIndexKey);
+    watchKeys.add(statusIndexKey);
+    watchKeys.add(schedulerKey);
+
+    bets.forEach((bet) => {
+      watchKeys.add(betKeys.record(subredditId, bet.id));
+      watchKeys.add(userKeys.betsAll(subredditId, bet.userId));
+      watchKeys.add(userKeys.betsActive(subredditId, bet.userId));
+      watchKeys.add(marketKeys.userPointer(subredditId, bet.marketId, bet.userId));
+    });
+
+    await runTransactionWithRetry<void, { market: Market }>(
+      Array.from(watchKeys),
+      async (tx, state) => {
+        for (const bet of bets) {
+          await this.bets.delete(tx, subredditId, bet);
+          await this.markets.clearUserBetPointer(tx, subredditId, bet.marketId, bet.userId);
+        }
+
+        await tx.del(betIndexKey);
+        await tx.del(schedulerKey);
+        await tx.del(marketKey);
+        await tx.zRem(allIndexKey, [market.id]);
+
+        const previousStatusIndex = marketKeys.indexByStatus(subredditId, state.market.status);
+        await tx.zRem(previousStatusIndex, [market.id]);
+      },
+      {
+        label: 'market:prune',
+        loadState: async (client: RedisClient) => {
+          const hash = await client.hGetAll(marketKey);
+          const current = deserializeMarket(hash);
+          if (!current) {
+            throw new NotFoundError(`Market ${market.id} not found.`);
+          }
+          return { market: current };
+        },
+      },
+    );
+  }
+
   private normalizeArchivableStatuses(statuses?: ReadonlyArray<MarketStatus>): MarketStatus[] {
     const fallback: MarketStatus[] = ['resolved', 'void'];
     if (!statuses || statuses.length === 0) {
@@ -1109,6 +1284,10 @@ export class MarketsService {
     }
 
     return null;
+  }
+
+  private getArchivedTimestamp(market: Market): number | null {
+    return this.getMetadataTimestamp(market, 'archivedAt');
   }
 
   private getMetadataTimestamp(market: Market, key: string): number | null {

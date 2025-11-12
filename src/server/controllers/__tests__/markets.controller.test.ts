@@ -47,6 +47,7 @@ const createDependencies = () => {
   const marketsService: Partial<MarketsService> = {
     createDraft: vi.fn(),
     archiveMarkets: vi.fn(),
+    pruneArchivedMarkets: vi.fn(),
   };
 
   const betsService: Partial<BetsService> = {};
@@ -181,6 +182,60 @@ describe('MarketsController archive route', () => {
     expect(response.body.error.code).toBe('VALIDATION_FAILED');
     expect(Array.isArray(response.body.error.details?.issues)).toBe(true);
     expect(marketsService.archiveMarkets).not.toHaveBeenCalled();
+  });
+});
+
+describe('MarketsController scheduler prune route', () => {
+  it('prunes archived markets with scheduler payload', async () => {
+    vi.useFakeTimers();
+    const now = new Date('2025-04-01T00:00:00.000Z');
+    vi.setSystemTime(now);
+
+    const pruneResult = {
+      processedMarkets: 12,
+      prunedMarkets: 4,
+      skippedMarkets: 8,
+      cutoffIso: '2025-01-01T00:00:00.000Z',
+      prunedIds: ['market-1', 'market-2', 'market-3', 'market-4'],
+    };
+
+    const { dependencies, marketsService } = createDependencies();
+    (marketsService.pruneArchivedMarkets as VitestMock).mockResolvedValue(pruneResult);
+
+    const app = createApp(dependencies, {});
+    const agent: SuperTest<SupertestRequest> = supertest(app);
+
+    const response = await agent
+      .post('/internal/scheduler/market-prune')
+      .send({
+        subredditId: 'sub-42',
+        olderThanDays: 90,
+        maxMarkets: 500,
+        statuses: ['resolved'],
+      })
+      .expect(200);
+
+    expect(response.body.data).toEqual(pruneResult);
+
+    expect(marketsService.pruneArchivedMarkets).toHaveBeenCalledTimes(1);
+    const [subredditId, options] = (marketsService.pruneArchivedMarkets as VitestMock).mock.calls[0] as Parameters<MarketsService['pruneArchivedMarkets']>;
+    expect(subredditId).toBe('sub-42');
+    expect(options.maxMarkets).toBe(500);
+    expect(options.statuses).toEqual(['resolved']);
+    expect(options.moderatorId).toBeNull();
+    expect(options.moderatorUsername).toBeNull();
+    const expectedCutoff = new Date(now.getTime() - 90 * 86_400_000);
+    expect(options.cutoff.toISOString()).toBe(expectedCutoff.toISOString());
+  });
+
+  it('rejects invalid scheduler payload', async () => {
+    const { dependencies, marketsService } = createDependencies();
+    const app = createApp(dependencies, {});
+    const agent: SuperTest<SupertestRequest> = supertest(app);
+
+    await agent.post('/internal/scheduler/market-prune').send({}).expect(400);
+
+    expect(marketsService.pruneArchivedMarkets).not.toHaveBeenCalled();
   });
 });
 

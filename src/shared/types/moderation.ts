@@ -8,7 +8,8 @@ export type ModeratorActionType =
   | 'RESOLVE_MARKET'
   | 'VOID_MARKET'
   | 'ADJUST_BALANCE'
-  | 'ARCHIVE_MARKETS';
+  | 'ARCHIVE_MARKETS'
+  | 'PRUNE_MARKETS';
 
 export interface ModeratorActionSnapshot<TBefore = unknown, TAfter = unknown> {
   readonly before: TBefore | null;

@@ -16,6 +16,7 @@ export const ModeratorActionTypeSchema = z.enum([
   'VOID_MARKET',
   'ADJUST_BALANCE',
   'ARCHIVE_MARKETS',
+  'PRUNE_MARKETS',
 ]);
 
 export const ModeratorActionSchema = z

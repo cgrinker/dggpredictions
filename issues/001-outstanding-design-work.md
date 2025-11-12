@@ -34,13 +34,16 @@ Tracked from the latest review of the design documents (2025-11-11).
 - [ ] Expand audit and metrics coverage around archival operations and advanced moderator tooling.
 	- [x] Record moderator + auto archive actions in audit log with before/after metadata.
 		- Logged `ARCHIVE_MARKETS` entries with before/after payload snapshots and system-actor fallback for scheduler runs.
-- [ ] Continue hardening moderator workflow endpoints; close open questions around alternative APIs (GraphQL) and live update strategies (track as post-MVP investigation).
+- [x] Continue hardening moderator workflow endpoints; close open questions around alternative APIs (GraphQL) and live update strategies (track as post-MVP investigation).
 	- [x] Captured GraphQL vs REST + live update exploration as a post-MVP follow-up in this tracker; revisit after archive scheduling work lands.
+	- [x] Authored `docs/moderator-api-post-mvp.md` outlining hardening checklist and post-MVP SSE/GraphQL decisions.
 
 ## Persistence & Data Integrity Design
-- [ ] Automate retention schedules and pruning jobs; report key archival metrics back to moderators.
-	- [ ] Scheduler job to prune resolved markets older than N days.
-	- [ ] Redis usage monitor stored under `metrics:storage`.
+- [x] Automate retention schedules and pruning jobs; report key archival metrics back to moderators.
+	- [x] Scheduler job to prune resolved markets older than N days.
+		- Added `/internal/scheduler/market-prune` endpoint + `MarketsService.pruneArchivedMarkets` removing archived markets and auditing `PRUNE_MARKETS` actions.
+	- [x] Redis usage monitor stored under `metrics:storage`.
+		- Persisted Redis memory/key snapshot in `OperationsService` when metrics summary is fetched.
 - [ ] Explore long-term export/backup options for deep history beyond Redis quotas (defer until allow-list response).
 
 ## Moderation Workflow & Compliance

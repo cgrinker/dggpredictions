@@ -870,3 +870,164 @@ describe('MarketsService archive', () => {
     expect(auditInput.payload.actorType).toBe('system');
   });
 });
+
+describe('MarketsService pruneArchivedMarkets', () => {
+  const subredditId = 'sub-1' as SubredditId;
+
+  it('prunes archived markets older than cutoff and records audit entry', async () => {
+    const cutoff = new Date('2024-06-01T00:00:00.000Z');
+
+    const oldArchived = createMarket({
+      id: 'market-old' as MarketId,
+      status: 'resolved',
+      metadata: { archivedAt: '2024-01-01T00:00:00.000Z' },
+    });
+
+    const recentArchived = createMarket({
+      id: 'market-recent' as MarketId,
+      status: 'resolved',
+      metadata: { archivedAt: '2024-08-01T00:00:00.000Z' },
+    });
+
+    const marketsByStatus: Record<MarketStatus, Market[]> = {
+      draft: [],
+      open: [],
+      closed: [],
+      resolved: [oldArchived, recentArchived],
+      void: [],
+    };
+
+    const marketsById = new Map<MarketId, Market>([
+      [oldArchived.id, oldArchived],
+      [recentArchived.id, recentArchived],
+    ]);
+
+    const { service, betRepo, auditService } = setupService({
+      marketRepoOverrides: {
+        list: vi
+          .fn()
+          .mockImplementation(async (_sid: SubredditId, opts?: { status?: MarketStatus }) => {
+            const status = opts?.status ?? 'resolved';
+            const markets = marketsByStatus[status] ?? [];
+            return { markets, total: markets.length };
+          }),
+      },
+      betRepoOverrides: {
+        listByMarket: vi
+          .fn()
+          .mockImplementation(async (_sid: SubredditId, marketId: MarketId) => {
+            const market = marketsById.get(marketId);
+            updateSettlementState({ market: market ?? settlementState.market, bets: [] });
+            return [];
+          }),
+        delete: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    const result = await service.pruneArchivedMarkets(subredditId, {
+      cutoff,
+      statuses: ['resolved'],
+      maxMarkets: 5,
+    });
+
+    expect(result.prunedMarkets).toBe(1);
+    expect(result.skippedMarkets).toBe(1);
+    expect(result.processedMarkets).toBe(2);
+    expect(result.prunedIds).toEqual([oldArchived.id]);
+
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+    expect((betRepo.delete as VitestMock)).not.toHaveBeenCalled();
+
+    const auditCalls = (auditService.recordAction as VitestMock).mock.calls.filter(([, input]) => input.action === 'PRUNE_MARKETS');
+    expect(auditCalls).toHaveLength(1);
+    const [, auditInput] = auditCalls[0];
+    expect(auditInput.performedBy).toBe('system:auto-archive');
+    expect(auditInput.payload.prunedMarketIds).toEqual([oldArchived.id]);
+    expect(auditInput.payload.prunedCount).toBe(1);
+  });
+
+  it('skips markets without archived timestamp', async () => {
+    const cutoff = new Date('2024-06-01T00:00:00.000Z');
+
+    const unresolvedArchive = createMarket({
+      id: 'market-unarchived' as MarketId,
+      status: 'resolved',
+      metadata: {},
+    });
+
+    const { service, auditService } = setupService({
+      marketRepoOverrides: {
+        list: vi.fn().mockResolvedValue({ markets: [unresolvedArchive], total: 1 }),
+      },
+      betRepoOverrides: {
+        listByMarket: vi
+          .fn()
+          .mockImplementation(async (_sid: SubredditId, _marketId: MarketId) => {
+            updateSettlementState({ market: unresolvedArchive, bets: [] });
+            return [];
+          }),
+        delete: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    const result = await service.pruneArchivedMarkets(subredditId, {
+      cutoff,
+      statuses: ['resolved'],
+    });
+
+    expect(result.prunedMarkets).toBe(0);
+    expect(result.skippedMarkets).toBe(1);
+    expect(result.processedMarkets).toBe(1);
+    expect(result.prunedIds).toHaveLength(0);
+
+    expect(runTransactionMock).not.toHaveBeenCalled();
+    expect(auditService.recordAction).not.toHaveBeenCalled();
+  });
+
+  it('removes lingering bets when pruning archived markets', async () => {
+    const cutoff = new Date('2024-06-01T00:00:00.000Z');
+
+    const archived = createMarket({
+      id: 'market-with-bets' as MarketId,
+      status: 'resolved',
+      metadata: { archivedAt: '2023-05-01T00:00:00.000Z' },
+    });
+
+    const lingeringBet = createBet({
+      id: 'bet-lingering' as Bet['id'],
+      marketId: archived.id,
+      userId: 'user-lingering' as UserId,
+      status: 'won',
+    });
+
+    const { service, betRepo, marketRepo } = setupService({
+      marketRepoOverrides: {
+        list: vi.fn().mockResolvedValue({ markets: [archived], total: 1 }),
+      },
+      betRepoOverrides: {
+        listByMarket: vi
+          .fn()
+          .mockImplementation(async (_sid: SubredditId, marketId: MarketId) => {
+            updateSettlementState({ market: archived, bets: [lingeringBet] });
+            return [lingeringBet];
+          }),
+        delete: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await service.pruneArchivedMarkets(subredditId, {
+      cutoff,
+      statuses: ['resolved'],
+      maxMarkets: 1,
+    });
+
+    expect((betRepo.delete as VitestMock)).toHaveBeenCalledWith(expect.anything(), subredditId, lingeringBet);
+    expect((marketRepo.clearUserBetPointer as VitestMock)).toHaveBeenCalledWith(
+      expect.anything(),
+      subredditId,
+      lingeringBet.marketId,
+      lingeringBet.userId,
+    );
+    expect(runTransactionMock).toHaveBeenCalledTimes(1);
+  });
+});

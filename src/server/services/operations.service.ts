@@ -4,6 +4,7 @@ import { MarketRepository } from '../repositories/market.repository.js';
 import { nowIso } from '../utils/time.js';
 import { redisClient } from '../redis-client.js';
 import { logger } from '../logging.js';
+import { metricsKeys } from '../utils/redis-keys.js';
 import type { RedisClient } from '@devvit/redis';
 
 interface IncidentProvider {
@@ -46,6 +47,8 @@ export class OperationsService {
       counters.redisUsedMemoryBytes = redisSnapshot.usedMemoryBytes;
       counters.redisPeakMemoryBytes = redisSnapshot.peakMemoryBytes;
       counters.redisTotalKeys = redisSnapshot.totalKeys;
+
+      await this.persistRedisUsage(redisSnapshot);
     }
 
     return {
@@ -114,5 +117,25 @@ export class OperationsService {
 
     const value = Number.parseInt(raw, 10);
     return Number.isNaN(value) ? null : value;
+  }
+
+  private async persistRedisUsage(snapshot: {
+    readonly usedMemoryBytes: number;
+    readonly peakMemoryBytes: number;
+    readonly totalKeys: number;
+  }): Promise<void> {
+    try {
+      const key = metricsKeys.storage();
+      await this.redis.hSet(key, {
+        updatedAt: nowIso(),
+        usedMemoryBytes: snapshot.usedMemoryBytes,
+        peakMemoryBytes: snapshot.peakMemoryBytes,
+        totalKeys: snapshot.totalKeys,
+      });
+    } catch (error) {
+      logger.warn('failed to persist redis usage metrics', {
+        message: error instanceof Error ? error.message : 'unknown error',
+      });
+    }
   }
 }
