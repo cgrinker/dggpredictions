@@ -19,6 +19,7 @@ import { SchedulerService } from './services/scheduler.service.js';
 import { AuditLogService } from './services/audit-log.service.js';
 import { BalanceAdjustmentService } from './services/balance-adjustment.service.js';
 import { UserDirectoryService } from './services/user-directory.service.js';
+import { OperationsService } from './services/operations.service.js';
 
 const configService = new ConfigService();
 const marketRepository = new MarketRepository();
@@ -36,6 +37,7 @@ const balanceAdjustmentService = new BalanceAdjustmentService(
   ledgerService,
   auditLogService,
 );
+const operationsService = new OperationsService(marketRepository);
 
 const marketsService = new MarketsService(
   marketRepository,
@@ -75,6 +77,7 @@ const router = createAppRouter({
   auditLogService,
   balanceAdjustmentService,
   configService,
+  operationsService,
 });
 app.use(router);
 

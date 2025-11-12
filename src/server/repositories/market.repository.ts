@@ -154,6 +154,33 @@ export class MarketRepository {
     await tx.del(pointerKey);
   }
 
+  async countByStatus(
+    subredditId: SubredditId,
+  ): Promise<{ readonly total: number; readonly byStatus: Record<MarketStatus, number> }> {
+    const statuses: readonly MarketStatus[] = ['draft', 'open', 'closed', 'resolved', 'void'];
+
+    const [total, ...statusCounts] = await Promise.all([
+      redisClient.zCard(marketKeys.indexAll(subredditId)),
+      ...statuses.map((status) => redisClient.zCard(marketKeys.indexByStatus(subredditId, status))),
+    ]);
+
+    const byStatus = statuses.reduce<Record<MarketStatus, number>>((acc, status, index) => {
+      acc[status] = statusCounts[index] ?? 0;
+      return acc;
+    }, {
+      draft: 0,
+      open: 0,
+      closed: 0,
+      resolved: 0,
+      void: 0,
+    });
+
+    return {
+      total,
+      byStatus,
+    };
+  }
+
   async applyUpdate(
     tx: TxClientLike,
     subredditId: SubredditId,

@@ -6,6 +6,7 @@ import type {
   MarketId,
   MarketStatus,
   Points,
+  ISODateString,
   UserBalance,
 } from './entities.js';
 import type { AppConfig } from './config.js';
@@ -47,6 +48,23 @@ export interface SessionInfo {
   readonly username: string | null;
   readonly isModerator: boolean;
   readonly config: AppConfig | null;
+}
+
+export interface MetricsSummary {
+  readonly counters: Record<string, number>;
+  readonly updatedAt: ISODateString;
+}
+
+export interface IncidentSummary {
+  readonly id: string;
+  readonly severity: 'info' | 'warning' | 'error';
+  readonly message: string;
+  readonly createdAt: ISODateString;
+}
+
+export interface IncidentFeed {
+  readonly incidents: readonly IncidentSummary[];
+  readonly fetchedAt: ISODateString;
 }
 
 export interface PlaceBetRequest {
