@@ -28,6 +28,9 @@ import { balanceKeys, betKeys, marketKeys, userKeys } from '../utils/redis-keys.
 import { runTransactionWithRetry } from '../utils/transactions.js';
 import { deserializeBet, deserializeMarket, deserializeUserBalance } from '../utils/serializers.js';
 
+const SYSTEM_ARCHIVE_ACTOR_ID = 'system:auto-archive' as UserId;
+const SYSTEM_ARCHIVE_ACTOR_USERNAME = 'auto-archive';
+
 interface MarketSettlementResult {
   readonly market: Market;
   readonly totals: {
@@ -88,6 +91,7 @@ interface ArchiveMarketsOptions {
   readonly cutoff: Date;
   readonly statuses?: ReadonlyArray<MarketStatus>;
   readonly moderatorId?: UserId | null;
+  readonly moderatorUsername?: string | null;
   readonly maxMarkets?: number;
   readonly dryRun?: boolean;
   readonly page?: number;
@@ -112,6 +116,18 @@ interface ListMarketsOptions {
   readonly status?: MarketStatus;
   readonly page?: number;
   readonly pageSize?: number;
+}
+
+interface ArchiveAuditEntry {
+  readonly before: Market;
+  readonly after: Market;
+  readonly betsArchived: number;
+}
+
+interface ArchiveActor {
+  readonly id: UserId;
+  readonly username: string;
+  readonly source: 'moderator' | 'system';
 }
 
 export class MarketsService {
@@ -463,10 +479,12 @@ export class MarketsService {
 
     const cutoffMillis = options.cutoff.getTime();
     const maxArchives = options.maxMarkets ?? Number.POSITIVE_INFINITY;
+    const actor = this.resolveArchiveActor(options.moderatorId ?? null, options.moderatorUsername ?? null);
     const page = Math.max(1, options.page ?? 1);
     const pageSize = Math.max(1, Math.min(500, options.pageSize ?? 50));
     const pageStartIndex = (page - 1) * pageSize;
     const candidateSummaries: MarketSummary[] = [];
+    const archiveAuditEntries: ArchiveAuditEntry[] = [];
 
     let archivedCount = 0;
     let processedCount = 0;
@@ -530,10 +548,16 @@ export class MarketsService {
           }
 
           const bets = await this.bets.listByMarket(subredditId, market.id);
-          await this.archiveMarketData(subredditId, market, bets, {
-            moderatorId: options.moderatorId ?? null,
+          const updatedMarket = await this.archiveMarketData(subredditId, market, bets, {
+            moderatorId: actor.id,
+            moderatorUsername: actor.username,
           });
           archivedCount += 1;
+          archiveAuditEntries.push({
+            before: market,
+            after: updatedMarket,
+            betsArchived: bets.length,
+          });
         }
 
         if (!stopProcessing && archivedCount >= maxCount) {
@@ -550,6 +574,22 @@ export class MarketsService {
 
         statusPage += 1;
       }
+    }
+
+    if (!options.dryRun && archiveAuditEntries.length > 0) {
+      await this.recordArchiveAudit(
+        subredditId,
+        actor,
+        {
+          statuses,
+          cutoffIso: options.cutoff.toISOString(),
+          archivedCount,
+          processedCount,
+          skippedCount,
+          maxCount: shouldLimit ? maxCount : null,
+        },
+        archiveAuditEntries,
+      );
     }
 
     return {
@@ -576,6 +616,73 @@ export class MarketsService {
     if (closesAt <= Date.now()) {
       throw new ValidationError('closesAt must be in the future.');
     }
+  }
+
+  private resolveArchiveActor(moderatorId?: UserId | null, moderatorUsername?: string | null): ArchiveActor {
+    if (moderatorId) {
+      return {
+        id: moderatorId,
+        username: moderatorUsername ?? 'unknown-moderator',
+        source: 'moderator',
+      } satisfies ArchiveActor;
+    }
+
+    return {
+      id: SYSTEM_ARCHIVE_ACTOR_ID,
+      username: SYSTEM_ARCHIVE_ACTOR_USERNAME,
+      source: 'system',
+    } satisfies ArchiveActor;
+  }
+
+  private async recordArchiveAudit(
+    subredditId: SubredditId,
+    actor: ArchiveActor,
+    summary: {
+      readonly statuses: readonly MarketStatus[];
+      readonly cutoffIso: string;
+      readonly archivedCount: number;
+      readonly processedCount: number;
+      readonly skippedCount: number;
+      readonly maxCount: number | null;
+    },
+    entries: readonly ArchiveAuditEntry[],
+  ): Promise<void> {
+    const beforeSnapshots = entries.map((entry) => this.buildArchiveSnapshot(entry.before));
+    const afterSnapshots = entries.map((entry) => this.buildArchiveSnapshot(entry.after));
+    const archivedIds = entries.map((entry) => entry.after.id);
+    const totalBetsArchived = entries.reduce((acc, entry) => acc + entry.betsArchived, 0);
+
+    await this.audit.recordAction(subredditId, {
+      performedBy: actor.id,
+      performedByUsername: actor.username,
+      action: 'ARCHIVE_MARKETS',
+      marketId: null,
+      payload: {
+        archivedMarketIds: archivedIds,
+        archivedCount: summary.archivedCount,
+        processedCount: summary.processedCount,
+        skippedCount: summary.skippedCount,
+        cutoffIso: summary.cutoffIso,
+        statuses: summary.statuses,
+        maxMarkets: summary.maxCount,
+        betsArchivedTotal: totalBetsArchived,
+        actorType: actor.source,
+        dryRun: false,
+      },
+      snapshot: {
+        before: beforeSnapshots,
+        after: afterSnapshots,
+      },
+    });
+  }
+
+  private buildArchiveSnapshot(market: Market): Record<string, unknown> {
+    return {
+      id: market.id,
+      status: market.status,
+      resolvedAt: market.resolvedAt,
+      metadata: market.metadata ?? null,
+    } satisfies Record<string, unknown>;
   }
 
   private async findUserBet(
@@ -916,8 +1023,8 @@ export class MarketsService {
     subredditId: SubredditId,
     market: Market,
     bets: readonly Bet[],
-    options: { moderatorId?: UserId | null },
-  ): Promise<void> {
+    options: { moderatorId?: UserId | null; moderatorUsername?: string | null },
+  ): Promise<Market> {
     const watchKeys = new Set<string>();
     const marketKey = marketKeys.record(subredditId, market.id);
     const betIndexKey = marketKeys.betsIndex(subredditId, market.id);
@@ -934,7 +1041,7 @@ export class MarketsService {
     const timestamp = nowIso();
     const keys = Array.from(watchKeys);
 
-    await runTransactionWithRetry<void, { market: Market }>(
+    return runTransactionWithRetry<Market, { market: Market }>(
       keys,
       async (tx, state) => {
         for (const bet of bets) {
@@ -950,11 +1057,13 @@ export class MarketsService {
           {
             archivedAt: timestamp,
             archivedBy: options.moderatorId ?? null,
+            archivedByUsername: options.moderatorUsername ?? undefined,
             archivedBetCount: bets.length,
           },
         );
 
         await this.markets.applyUpdate(tx, subredditId, state.market, updated);
+        return updated;
       },
       {
         label: 'market:archive',

@@ -115,6 +115,7 @@ describe('MarketsController archive route', () => {
     expect(options.page).toBeUndefined();
     expect(options.pageSize).toBeUndefined();
     expect(options.moderatorId).toBe(defaultContext.userId);
+    expect(options.moderatorUsername).toBe(defaultContext.username);
   });
 
   it('supports dry-run mode for archive requests', async () => {
@@ -163,6 +164,7 @@ describe('MarketsController archive route', () => {
     expect(options.statuses).toEqual(['closed']);
     expect(options.dryRun).toBe(true);
     expect(options.moderatorId).toBe(defaultContext.userId);
+    expect(options.moderatorUsername).toBe(defaultContext.username);
   });
 
   it('rejects invalid payloads with validation error', async () => {

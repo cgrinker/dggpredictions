@@ -296,6 +296,7 @@ export const registerMarketRoutes = (
         ...(body.page !== undefined ? { page: body.page } : {}),
         ...(body.pageSize !== undefined ? { pageSize: body.pageSize } : {}),
         moderatorId: context.userId ?? null,
+        moderatorUsername: context.username ?? null,
       };
 
       const result = await dependencies.marketsService.archiveMarkets(

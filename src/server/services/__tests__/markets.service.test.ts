@@ -570,6 +570,7 @@ describe('MarketsService lifecycle', () => {
 describe('MarketsService archive', () => {
   const subredditId = 'sub-1' as SubredditId;
   const moderatorId = 'mod-archive' as UserId;
+  const moderatorUsername = 'mod-archive-user';
 
   it('archives eligible markets before cutoff', async () => {
     const cutoff = new Date('2024-02-01T00:00:00.000Z');
@@ -630,7 +631,7 @@ describe('MarketsService archive', () => {
 
     const betsByMarket = new Map<MarketId, Bet[]>([[archivable.id, betsForArchivable]]);
 
-    const { service, marketRepo, betRepo } = setupService({
+    const { service, marketRepo, betRepo, auditService } = setupService({
       marketRepoOverrides: {
         list: vi
           .fn()
@@ -658,6 +659,7 @@ describe('MarketsService archive', () => {
       cutoff,
       statuses: ['resolved'],
       moderatorId,
+      moderatorUsername,
     });
 
     expect(result.archivedMarkets).toBe(1);
@@ -673,10 +675,36 @@ describe('MarketsService archive', () => {
 
     const updatedMarket = (marketRepo.applyUpdate as VitestMock).mock.calls[0][3] as Market;
     expect(updatedMarket.metadata?.archivedBy).toBe(moderatorId);
+  expect(updatedMarket.metadata?.archivedByUsername).toBe(moderatorUsername);
     expect(updatedMarket.metadata?.archivedBetCount).toBe(betsForArchivable.length);
     expect(typeof updatedMarket.metadata?.archivedAt).toBe('string');
 
     expect(runTransactionMock).toHaveBeenCalledTimes(1);
+
+    const auditCalls = (auditService.recordAction as VitestMock).mock.calls.filter(([, input]) => input.action === 'ARCHIVE_MARKETS');
+    expect(auditCalls).toHaveLength(1);
+    const [, auditInput] = auditCalls[0];
+    expect(auditInput.performedBy).toBe(moderatorId);
+    expect(auditInput.performedByUsername).toBe(moderatorUsername);
+    expect(auditInput.payload).toEqual(
+      expect.objectContaining({
+        archivedMarketIds: [archivable.id],
+        archivedCount: 1,
+        processedCount: 3,
+        skippedCount: 2,
+        statuses: ['resolved'],
+        betsArchivedTotal: betsForArchivable.length,
+      }),
+    );
+    expect(auditInput.snapshot?.before).toEqual([
+      expect.objectContaining({ id: archivable.id }),
+    ]);
+    expect(auditInput.snapshot?.after).toEqual([
+      expect.objectContaining({
+        id: archivable.id,
+        metadata: expect.objectContaining({ archivedBetCount: betsForArchivable.length }),
+      }),
+    ]);
   });
 
   it('supports dry-run without mutating data', async () => {
@@ -688,7 +716,7 @@ describe('MarketsService archive', () => {
       metadata: { lastSettledAt: '2024-01-01T00:00:00.000Z' },
     });
 
-    const { service, marketRepo, betRepo } = setupService({
+    const { service, marketRepo, betRepo, auditService } = setupService({
       marketRepoOverrides: {
         list: vi.fn().mockResolvedValue({ markets: [archivable], total: 1 }),
       },
@@ -702,6 +730,7 @@ describe('MarketsService archive', () => {
       cutoff,
       statuses: ['void'],
       moderatorId,
+      moderatorUsername,
       dryRun: true,
     });
 
@@ -717,6 +746,7 @@ describe('MarketsService archive', () => {
     expect(betRepo.delete).not.toHaveBeenCalled();
     expect(marketRepo.applyUpdate).not.toHaveBeenCalled();
     expect(runTransactionMock).not.toHaveBeenCalled();
+    expect(auditService.recordAction).not.toHaveBeenCalled();
   });
 
   it('obeys maxMarkets across statuses', async () => {
@@ -748,7 +778,7 @@ describe('MarketsService archive', () => {
       [voidMarket.id, [createBet({ marketId: voidMarket.id })]],
     ]);
 
-    const { service, marketRepo, betRepo } = setupService({
+    const { service, marketRepo, betRepo, auditService } = setupService({
       marketRepoOverrides: {
         list: vi
           .fn()
@@ -778,6 +808,7 @@ describe('MarketsService archive', () => {
     const result = await service.archiveMarkets(subredditId, {
       cutoff,
       moderatorId,
+      moderatorUsername,
       maxMarkets: 1,
     });
 
@@ -794,5 +825,48 @@ describe('MarketsService archive', () => {
     expect((betRepo.listByMarket as VitestMock)).toHaveBeenCalledTimes(1);
     expect((betRepo.delete as VitestMock)).toHaveBeenCalledTimes(1);
     expect(runTransactionMock).toHaveBeenCalledTimes(1);
+
+    const auditCalls = (auditService.recordAction as VitestMock).mock.calls.filter(([, input]) => input.action === 'ARCHIVE_MARKETS');
+    expect(auditCalls).toHaveLength(1);
+    const [, auditInput] = auditCalls[0];
+    expect(auditInput.payload.archivedMarketIds).toEqual([resolvedMarket.id]);
+    expect(auditInput.payload.statuses).toEqual(['resolved', 'void']);
+    expect(auditInput.payload.maxMarkets).toBe(1);
+  });
+
+  it('records audit action with system actor when moderator context is missing', async () => {
+    const cutoff = new Date('2024-02-01T00:00:00.000Z');
+
+    const archivable = createMarket({
+      id: 'market-system-archive' as MarketId,
+      status: 'resolved',
+      resolvedAt: '2023-12-31T00:00:00.000Z',
+      metadata: { lastSettledAt: '2023-12-31T00:00:00.000Z' },
+    });
+
+    const { service, auditService } = setupService({
+      marketRepoOverrides: {
+        list: vi.fn().mockResolvedValue({ markets: [archivable], total: 1 }),
+      },
+      betRepoOverrides: {
+        listByMarket: vi.fn().mockResolvedValue([
+          createBet({ marketId: archivable.id, userId: 'user-1' as UserId }),
+        ]),
+        delete: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await service.archiveMarkets(subredditId, {
+      cutoff,
+      statuses: ['resolved'],
+      maxMarkets: 5,
+    });
+
+    const auditCalls = (auditService.recordAction as VitestMock).mock.calls.filter(([, input]) => input.action === 'ARCHIVE_MARKETS');
+    expect(auditCalls).toHaveLength(1);
+    const [, auditInput] = auditCalls[0];
+    expect(auditInput.performedBy).toBe('system:auto-archive');
+    expect(auditInput.performedByUsername).toBe('auto-archive');
+    expect(auditInput.payload.actorType).toBe('system');
   });
 });
