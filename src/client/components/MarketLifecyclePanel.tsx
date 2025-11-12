@@ -256,13 +256,13 @@ export const MarketLifecyclePanel = () => {
     <div className="flex flex-col gap-6 w-full max-w-4xl mx-auto py-8">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Moderator Lifecycle Console</h1>
-          <p className="text-sm text-gray-600">
+          <h1 className="text-2xl font-bold theme-heading">Moderator Lifecycle Console</h1>
+          <p className="text-sm theme-subtle">
             Manage draft and open markets, and trigger lifecycle actions backed by the scheduler-enabled API.
           </p>
         </div>
         <button
-          className="px-4 py-2 rounded bg-slate-200 text-sm font-medium text-gray-800 hover:bg-slate-300 transition"
+          className="btn-base btn-secondary px-4 py-2 text-sm"
           onClick={refreshAll}
           disabled={draftsLoading || openLoading || closedLoading || auditLoading}
         >
@@ -272,10 +272,8 @@ export const MarketLifecyclePanel = () => {
 
       {feedback && (
         <div
-          className={`rounded border px-4 py-3 text-sm ${
-            feedback.type === 'success'
-              ? 'border-green-200 bg-green-50 text-green-800'
-              : 'border-red-200 bg-red-50 text-red-800'
+          className={`rounded px-4 py-3 text-sm ${
+            feedback.type === 'success' ? 'feedback-success' : 'feedback-error'
           }`}
         >
           {feedback.message}
@@ -283,7 +281,7 @@ export const MarketLifecyclePanel = () => {
       )}
 
       {hasErrors && (
-        <div className="rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div className="rounded px-4 py-3 text-sm feedback-error">
           Failed to load moderator data. Try refreshing or check moderator permissions.
         </div>
       )}
@@ -291,31 +289,31 @@ export const MarketLifecyclePanel = () => {
       <CreateMarketPanel onCreated={refreshAll} />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xl font-semibold text-gray-900">Draft Markets</h2>
+        <h2 className="text-xl font-semibold theme-heading">Draft Markets</h2>
         {draftsLoading && draftMarkets.length === 0 ? (
-          <p className="text-sm text-gray-600">Loading drafts…</p>
+          <p className="text-sm theme-subtle">Loading drafts…</p>
         ) : draftMarkets.length === 0 ? (
-          <p className="text-sm text-gray-600">No draft markets ready to publish.</p>
+          <p className="text-sm theme-subtle">No draft markets ready to publish.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {draftMarkets.map((market) => (
-              <li key={market.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <li key={market.id} className="rounded-2xl theme-card p-6">
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{market.title}</h3>
-                      <p className="text-sm text-gray-600">Closes {formatDateTime(market.closesAt)}</p>
+                      <h3 className="text-lg font-semibold theme-heading">{market.title}</h3>
+                      <p className="text-sm theme-subtle">Closes {formatDateTime(market.closesAt)}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        className="px-3 py-2 rounded bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="btn-base btn-primary px-4 py-2 text-sm"
                         onClick={() => handlePublish(market)}
                         disabled={isPending(market, 'publish')}
                       >
                         {isPending(market, 'publish') ? 'Publishing…' : 'Publish'}
                       </button>
                       <button
-                        className="px-3 py-2 rounded border border-orange-600 text-orange-700 text-sm font-medium hover:bg-orange-50 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="btn-base btn-ghost px-4 py-2 text-sm"
                         onClick={() => handlePublish(market, null)}
                         disabled={isPending(market, 'publish')}
                       >
@@ -323,21 +321,21 @@ export const MarketLifecyclePanel = () => {
                       </button>
                     </div>
                   </div>
-                  <dl className="grid grid-cols-2 gap-y-1 text-xs text-gray-500 sm:grid-cols-4">
+                  <dl className="grid grid-cols-2 gap-y-1 text-xs theme-muted sm:grid-cols-4">
                     <div>
-                      <dt className="font-medium text-gray-700">Pot Yes</dt>
+                      <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
                       <dd>{formatPoints(market.potYes)}</dd>
                     </div>
                     <div>
-                      <dt className="font-medium text-gray-700">Pot No</dt>
+                      <dt className="font-medium theme-heading text-xs">Pot No</dt>
                       <dd>{formatPoints(market.potNo)}</dd>
                     </div>
                     <div>
-                      <dt className="font-medium text-gray-700">Total Bets</dt>
+                      <dt className="font-medium theme-heading text-xs">Total Bets</dt>
                       <dd>{market.totalBets}</dd>
                     </div>
                     <div>
-                      <dt className="font-medium text-gray-700">Implied Yes</dt>
+                      <dt className="font-medium theme-heading text-xs">Implied Yes</dt>
                       <dd>{market.impliedYesPayout}x</dd>
                     </div>
                   </dl>
@@ -349,44 +347,44 @@ export const MarketLifecyclePanel = () => {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xl font-semibold text-gray-900">Open Markets</h2>
+        <h2 className="text-xl font-semibold theme-heading">Open Markets</h2>
         {openLoading && openMarkets.length === 0 ? (
-          <p className="text-sm text-gray-600">Loading open markets…</p>
+          <p className="text-sm theme-subtle">Loading open markets…</p>
         ) : openMarkets.length === 0 ? (
-          <p className="text-sm text-gray-600">No open markets currently accepting bets.</p>
+          <p className="text-sm theme-subtle">No open markets currently accepting bets.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {openMarkets.map((market) => (
-              <li key={market.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <li key={market.id} className="rounded-2xl theme-card p-6">
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900">{market.title}</h3>
-                      <p className="text-sm text-gray-600">Closes {formatDateTime(market.closesAt)}</p>
+                      <h3 className="text-lg font-semibold theme-heading">{market.title}</h3>
+                      <p className="text-sm theme-subtle">Closes {formatDateTime(market.closesAt)}</p>
                     </div>
                     <button
-                      className="px-3 py-2 rounded bg-slate-800 text-white text-sm font-medium hover:bg-slate-900 transition disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="btn-base btn-primary px-4 py-2 text-sm"
                       onClick={() => handleClose(market)}
                       disabled={isPending(market, 'close')}
                     >
                       {isPending(market, 'close') ? 'Closing…' : 'Close Market'}
                     </button>
                   </div>
-                  <dl className="grid grid-cols-2 gap-y-1 text-xs text-gray-500 sm:grid-cols-4">
+                  <dl className="grid grid-cols-2 gap-y-1 text-xs theme-muted sm:grid-cols-4">
                     <div>
-                      <dt className="font-medium text-gray-700">Pot Yes</dt>
+                      <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
                       <dd>{formatPoints(market.potYes)}</dd>
                     </div>
                     <div>
-                      <dt className="font-medium text-gray-700">Pot No</dt>
+                      <dt className="font-medium theme-heading text-xs">Pot No</dt>
                       <dd>{formatPoints(market.potNo)}</dd>
                     </div>
                     <div>
-                      <dt className="font-medium text-gray-700">Total Bets</dt>
+                      <dt className="font-medium theme-heading text-xs">Total Bets</dt>
                       <dd>{market.totalBets}</dd>
                     </div>
                     <div>
-                      <dt className="font-medium text-gray-700">Implied No</dt>
+                      <dt className="font-medium theme-heading text-xs">Implied No</dt>
                       <dd>{market.impliedNoPayout}x</dd>
                     </div>
                   </dl>
@@ -398,14 +396,14 @@ export const MarketLifecyclePanel = () => {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-xl font-semibold text-gray-900">Closed Markets</h2>
-        <p className="text-sm text-gray-600">
+        <h2 className="text-xl font-semibold theme-heading">Closed Markets</h2>
+        <p className="text-sm theme-subtle">
           Resolve outcomes to trigger payouts. Capture notes so the audit trail reflects moderator decisions.
         </p>
         {closedLoading && closedMarkets.length === 0 ? (
-          <p className="text-sm text-gray-600">Loading closed markets…</p>
+          <p className="text-sm theme-subtle">Loading closed markets…</p>
         ) : closedMarkets.length === 0 ? (
-          <p className="text-sm text-gray-600">No closed markets waiting on resolution.</p>
+          <p className="text-sm theme-subtle">No closed markets waiting on resolution.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {closedMarkets.map((market) => {
@@ -414,11 +412,11 @@ export const MarketLifecyclePanel = () => {
               const rawLastClosedAt = market.metadata?.['lastClosedAt'];
               const closedTimestamp = isString(rawLastClosedAt) ? rawLastClosedAt : market.closesAt;
               return (
-                <li key={market.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <li key={market.id} className="rounded-2xl theme-card p-6">
                   <div className="flex flex-col gap-3">
                     <div className="flex flex-col gap-1">
-                      <h3 className="text-lg font-semibold text-gray-900">{market.title}</h3>
-                      <p className="text-sm text-gray-600">
+                      <h3 className="text-lg font-semibold theme-heading">{market.title}</h3>
+                      <p className="text-sm theme-subtle">
                         Closed {formatDateTime(closedTimestamp)} • Total bets {market.totalBets}
                       </p>
                     </div>
@@ -428,10 +426,8 @@ export const MarketLifecyclePanel = () => {
                         <button
                           key={side}
                           type="button"
-                          className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                            draft.resolution === side
-                              ? 'bg-slate-900 text-white shadow-sm'
-                              : 'bg-white text-gray-700 border border-slate-200 hover:bg-slate-50'
+                          className={`btn-base px-4 py-2 text-sm ${
+                            draft.resolution === side ? 'btn-toggle-active' : 'btn-toggle-inactive'
                           }`}
                           onClick={() =>
                             setResolutionDrafts((current) => ({
@@ -448,7 +444,7 @@ export const MarketLifecyclePanel = () => {
                       ))}
                     </div>
 
-                    <label className="flex flex-col gap-1 text-sm text-gray-700">
+                    <label className="flex flex-col gap-1 text-sm theme-heading">
                       Resolution Notes (optional)
                       <textarea
                         value={draft.notes}
@@ -462,14 +458,14 @@ export const MarketLifecyclePanel = () => {
                             },
                           }))
                         }
-                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                        className="w-full input-control rounded-md px-3 py-2 text-sm"
                         placeholder="Summarize supporting evidence or moderator context"
                       />
                     </label>
 
                     <div className="flex items-center gap-3">
                       <button
-                        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                        className="btn-base btn-primary px-4 py-2 text-sm"
                         onClick={() => handleResolve(market)}
                         disabled={isPending(market, 'resolve')}
                       >
@@ -478,7 +474,7 @@ export const MarketLifecyclePanel = () => {
                           : `Resolve as ${draft.resolution.toUpperCase()}`}
                       </button>
                       <button
-                        className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-slate-100"
+                        className="btn-base btn-secondary px-3 py-2 text-sm"
                         onClick={() => setResolutionDrafts((current) => {
                           const next = { ...current };
                           delete next[market.id];
@@ -490,32 +486,32 @@ export const MarketLifecyclePanel = () => {
                       </button>
                     </div>
 
-                    <dl className="grid grid-cols-2 gap-y-2 text-xs text-gray-500 sm:grid-cols-4">
+                    <dl className="grid grid-cols-2 gap-y-2 text-xs theme-muted sm:grid-cols-4">
                       <div>
-                        <dt className="font-medium text-gray-700">Pot Yes</dt>
+                        <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
                         <dd>{formatPoints(market.potYes)}</dd>
                       </div>
                       <div>
-                        <dt className="font-medium text-gray-700">Pot No</dt>
+                        <dt className="font-medium theme-heading text-xs">Pot No</dt>
                         <dd>{formatPoints(market.potNo)}</dd>
                       </div>
                       <div>
-                        <dt className="font-medium text-gray-700">Implied Yes</dt>
+                        <dt className="font-medium theme-heading text-xs">Implied Yes</dt>
                         <dd>{market.impliedYesPayout}x</dd>
                       </div>
                       <div>
-                        <dt className="font-medium text-gray-700">Implied No</dt>
+                        <dt className="font-medium theme-heading text-xs">Implied No</dt>
                         <dd>{market.impliedNoPayout}x</dd>
                       </div>
                     </dl>
 
                     {auditEntries.length > 0 && (
-                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-gray-600">
-                        <p className="mb-1 font-semibold text-gray-700">Audit Trail</p>
+                      <div className="rounded-md border theme-border bg-[color:var(--surface-muted)] px-3 py-2 text-xs theme-muted">
+                        <p className="mb-1 font-semibold theme-heading text-sm">Audit Trail</p>
                         <ul className="list-disc pl-4">
                           {auditEntries.map((entry) => (
                             <li key={`${market.id}-${entry.label}`}>
-                              <span className="font-medium text-gray-700">{entry.label}:</span> {entry.value}
+                              <span className="font-medium theme-heading text-xs">{entry.label}:</span> {entry.value}
                             </li>
                           ))}
                         </ul>
@@ -529,62 +525,64 @@ export const MarketLifecyclePanel = () => {
         )}
       </section>
 
-      <ManualAdjustmentPanel auditActions={auditActions} onAdjustmentRecorded={refreshAll} />
+      <section className="rounded-2xl theme-card p-6">
+        <ManualAdjustmentPanel auditActions={auditActions} onAdjustmentRecorded={refreshAll} />
+      </section>
 
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-xl font-semibold text-gray-900">Recent Moderator Actions</h2>
-          <p className="text-sm text-gray-600">
+          <h2 className="text-xl font-semibold theme-heading">Recent Moderator Actions</h2>
+          <p className="text-sm theme-subtle">
             The latest audit log entries recorded by the backend service.
             {auditFetchedAt ? ` Updated ${formatDateTime(auditFetchedAt)}.` : ''}
           </p>
         </div>
         {auditError && (
-          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          <div className="rounded px-3 py-2 text-xs feedback-error">
             Failed to load audit log. Try refreshing or verify moderator permissions.
           </div>
         )}
         {auditLoading && auditActions.length === 0 ? (
-          <p className="text-sm text-gray-600">Loading audit log…</p>
+          <p className="text-sm theme-subtle">Loading audit log…</p>
         ) : auditActions.length === 0 ? (
-          <p className="text-sm text-gray-600">No moderator actions recorded yet.</p>
+          <p className="text-sm theme-subtle">No moderator actions recorded yet.</p>
         ) : (
           <ul className="flex flex-col gap-3">
             {auditActions.map((entry) => {
               const badges = buildActionBadges(entry);
               const payloadPreview = formatPayloadPreview(entry.payload);
               return (
-                <li key={entry.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <li key={entry.id} className="rounded-2xl theme-card p-6">
                   <div className="flex flex-col gap-2">
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-gray-900">{formatActionLabel(entry.action)}</p>
-                        <p className="text-xs text-gray-500">{formatDateTime(entry.createdAt)}</p>
+                        <p className="text-sm font-semibold theme-heading">{formatActionLabel(entry.action)}</p>
+                        <p className="text-xs theme-muted">{formatDateTime(entry.createdAt)}</p>
                       </div>
-                      <div className="text-xs text-gray-600">
-                        <span className="font-medium text-gray-700">Moderator:</span>{' '}
+                      <div className="text-xs theme-muted">
+                        <span className="font-medium theme-heading text-xs">Moderator:</span>{' '}
                         {entry.performedByUsername || entry.performedBy}
                       </div>
                     </div>
                     {badges.length > 0 && (
-                      <ul className="flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
+                      <ul className="flex flex-wrap items-center gap-2 text-[11px] theme-muted">
                         {badges.map((badge) => (
                           <li
                             key={`${entry.id}-${badge.label}`}
-                            className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1"
+                            className="badge-soft px-2.5 py-1"
                           >
-                            <span className="font-medium text-gray-700">{badge.label}:</span> {badge.value}
+                            <span className="font-medium theme-heading text-[11px]">{badge.label}:</span> {badge.value}
                           </li>
                         ))}
                       </ul>
                     )}
                     {payloadPreview && (
-                      <pre className="overflow-x-auto rounded-md bg-slate-900 px-3 py-2 text-xs text-slate-100">
+                      <pre className="overflow-x-auto code-block text-xs">
                         {payloadPreview}
                       </pre>
                     )}
                     {entry.snapshot && (
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs theme-muted">
                         Snapshot captured with before/after state for this action.
                       </p>
                     )}

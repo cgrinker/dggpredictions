@@ -1,6 +1,6 @@
 ## dggpredictions
 
-Prediction market companion for the /r/dgg subreddit built on Reddit's Devvit platform. The web client lets participants browse markets, place bets, monitor their wallet, and climb the leaderboard, while moderators manage market lifecycles from the same bundle.
+Prediction market companion for the r/Destiny subreddit built on Reddit's Devvit platform. The web client lets participants browse markets, place bets, monitor their wallet, and climb the leaderboard, while moderators manage market lifecycles from the same bundle.
 
 ### Features
 

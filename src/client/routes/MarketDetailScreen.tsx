@@ -5,6 +5,7 @@ import { isApiError, type ApiError } from '../api/client.js';
 import { useMarketDetail } from '../hooks/useMarketDetail.js';
 import { useWallet } from '../hooks/useWallet.js';
 import { formatDateTime, formatPoints, formatRelativeTime } from '../utils/format.js';
+import { themeTokens } from '../utils/theme.js';
 
 interface MarketDetailScreenProps {
   readonly marketId: string | null;
@@ -91,14 +92,14 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
 
   if (!marketId) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
         <button
-          className="self-start rounded-md border border-slate-300 px-3 py-2 text-sm text-gray-700 transition hover:bg-slate-100"
+          className="self-start btn-base btn-secondary px-3 py-2 text-sm"
           onClick={onBack}
         >
           Back to markets
         </button>
-        <p className="text-sm text-gray-600">Select a market from the list to view details.</p>
+        <p className="text-sm theme-subtle">Select a market from the list to view details.</p>
       </div>
     );
   }
@@ -106,7 +107,7 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
   return (
     <div className="flex flex-col gap-6">
       <button
-        className="self-start rounded-md border border-slate-300 px-3 py-2 text-sm text-gray-700 transition hover:bg-slate-100"
+        className="self-start btn-base btn-secondary px-3 py-2 text-sm"
         onClick={onBack}
       >
         Back to markets
@@ -114,10 +115,8 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
 
       {feedback && (
         <div
-          className={`rounded-md border px-4 py-3 text-sm ${
-            feedback.type === 'success'
-              ? 'border-green-200 bg-green-50 text-green-800'
-              : 'border-red-200 bg-red-50 text-red-800'
+          className={`rounded-md px-4 py-3 text-sm ${
+            feedback.type === 'success' ? 'feedback-success' : 'feedback-error'
           }`}
         >
           {feedback.message}
@@ -125,7 +124,7 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
       )}
 
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <div className="rounded-md px-4 py-3 text-sm feedback-error">
           Failed to load market details.{' '}
           <button className="underline" onClick={() => refetch()}>
             Try again
@@ -134,42 +133,44 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
       )}
 
       {isLoading && !market ? (
-        <p className="text-sm text-gray-600">Loading market…</p>
+        <p className="text-sm theme-subtle">Loading market…</p>
       ) : market ? (
         <div className="flex flex-col gap-6">
           <header className="flex flex-col gap-2">
-            <h1 className="text-2xl font-bold text-gray-900">{market.title}</h1>
-            <p className="text-sm text-gray-600">Created at {formatDateTime(market.createdAt)}</p>
-            <p className="text-sm text-gray-600">Closes {formatRelativeTime(market.closesAt)}</p>
+            <h1 className="text-2xl font-bold theme-heading">{market.title}</h1>
+            <p className="text-sm theme-subtle">Created at {formatDateTime(market.createdAt)}</p>
+            <p className="text-sm theme-subtle">Closes {formatRelativeTime(market.closesAt)}</p>
           </header>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900">Market Overview</h2>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{market.description}</p>
-            <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm text-gray-600 sm:grid-cols-4">
+          <section className="rounded-2xl theme-card p-5">
+            <h2 className="text-lg font-semibold theme-heading">Market Overview</h2>
+            <p className="mt-2 whitespace-pre-wrap text-sm" style={{ color: themeTokens.textSecondary }}>
+              {market.description}
+            </p>
+            <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm theme-muted sm:grid-cols-4">
               <div>
-                <dt className="font-medium text-gray-700">Status</dt>
+                <dt className="font-medium theme-heading text-xs">Status</dt>
                 <dd className="capitalize">{market.status}</dd>
               </div>
               <div>
-                <dt className="font-medium text-gray-700">Pot Yes</dt>
+                <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
                 <dd>{formatPoints(market.potYes)}</dd>
               </div>
               <div>
-                <dt className="font-medium text-gray-700">Pot No</dt>
+                <dt className="font-medium theme-heading text-xs">Pot No</dt>
                 <dd>{formatPoints(market.potNo)}</dd>
               </div>
               <div>
-                <dt className="font-medium text-gray-700">Total Bets</dt>
+                <dt className="font-medium theme-heading text-xs">Total Bets</dt>
                 <dd>{market.totalBets}</dd>
               </div>
             </dl>
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900">Your Position</h2>
+          <section className="rounded-2xl theme-card p-5">
+            <h2 className="text-lg font-semibold theme-heading">Your Position</h2>
             {market.userBet ? (
-              <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-gray-700">
+              <div className="mt-2 rounded-md border theme-border bg-[color:var(--surface-muted)] px-4 py-3 text-sm" style={{ color: themeTokens.textSecondary }}>
                 You have bet <strong>{formatPoints(market.userBet.wager)}</strong> points on{' '}
                 <strong className="uppercase">{market.userBet.side}</strong>.{' '}
                 {market.userBet.status === 'active'
@@ -177,14 +178,14 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
                   : `Outcome: ${market.userBet.status}.`}
               </div>
             ) : (
-              <p className="mt-2 text-sm text-gray-600">No bets placed yet.</p>
+              <p className="mt-2 text-sm theme-subtle">No bets placed yet.</p>
             )}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900">Place a Bet</h2>
+          <section className="rounded-2xl theme-card p-5">
+            <h2 className="text-lg font-semibold theme-heading">Place a Bet</h2>
             {bettingDisabledReason ? (
-              <p className="mt-2 text-sm text-gray-600">{bettingDisabledReason}</p>
+              <p className="mt-2 text-sm theme-subtle">{bettingDisabledReason}</p>
             ) : (
               <form className="mt-3 flex flex-col gap-4" onSubmit={handleSubmit}>
                 <div className="flex items-center gap-2">
@@ -192,10 +193,8 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
                     <button
                       key={side}
                       type="button"
-                      className={`rounded-md border px-4 py-2 text-sm font-medium transition ${
-                        side === selectedSide
-                          ? 'border-slate-900 bg-slate-900 text-white'
-                          : 'border-slate-300 bg-white text-gray-700 hover:bg-slate-50'
+                      className={`btn-base px-4 py-2 text-sm ${
+                        side === selectedSide ? 'btn-toggle-active' : 'btn-toggle-inactive'
                       }`}
                       onClick={() => setSelectedSide(side)}
                     >
@@ -203,7 +202,7 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
                     </button>
                   ))}
                 </div>
-                <label className="flex flex-col gap-1 text-sm text-gray-700">
+                <label className="flex flex-col gap-1 text-sm theme-heading">
                   Wager (points)
                   <input
                     type="number"
@@ -211,23 +210,25 @@ export const MarketDetailScreen = ({ marketId, onBack }: MarketDetailScreenProps
                     step={1}
                     value={wager}
                     onChange={(event) => setWager(event.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+                    className="w-full input-control rounded-md px-3 py-2 text-sm"
                   />
                 </label>
                 {wallet && (
-                  <p className="text-xs text-gray-500">Current balance: {formatPoints(wallet.balance)} points</p>
+                  <p className="text-xs theme-muted">
+                    Current balance: {formatPoints(wallet.balance)} points
+                  </p>
                 )}
                 <div className="flex gap-2">
                   <button
                     type="submit"
-                    className="inline-flex items-center justify-center rounded-md bg-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-60"
+                    className="inline-flex items-center justify-center btn-base btn-primary px-4 py-2 text-sm"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? 'Placing bet…' : 'Place Bet'}
                   </button>
                   <button
                     type="button"
-                    className="inline-flex items-center justify-center rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-slate-100"
+                    className="inline-flex items-center justify-center btn-base btn-secondary px-4 py-2 text-sm"
                     onClick={() => void refetch()}
                   >
                     Refresh Market

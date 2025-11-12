@@ -1,10 +1,12 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MarketLifecyclePanel } from './components/MarketLifecyclePanel.js';
 import { MarketsScreen, type MarketsFilter } from './routes/MarketsScreen.js';
 import { MarketDetailScreen } from './routes/MarketDetailScreen.js';
 import { WalletScreen } from './routes/WalletScreen.js';
 import { BetsScreen } from './routes/BetsScreen.js';
 import { LeaderboardScreen } from './routes/LeaderboardScreen.js';
+import { useSession } from './hooks/useSession.js';
+import { themeTokens } from './utils/theme.js';
 
 type AppRoute = 'markets' | 'wallet' | 'bets' | 'leaderboard' | 'moderator';
 
@@ -17,6 +19,7 @@ const NAV_ITEMS: ReadonlyArray<{ readonly key: AppRoute; readonly label: string 
 ];
 
 export const App = () => {
+  const { data: session, isLoading: sessionLoading } = useSession();
   const [route, setRoute] = useState<AppRoute>('markets');
   const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
   const [marketFilter, setMarketFilter] = useState<MarketsFilter>('open');
@@ -38,6 +41,19 @@ export const App = () => {
   const handleBackToMarkets = useCallback(() => {
     setSelectedMarketId(null);
   }, []);
+
+  const navItems = useMemo(() => {
+    if (session?.isModerator) {
+      return NAV_ITEMS;
+    }
+    return NAV_ITEMS.filter((item) => item.key !== 'moderator');
+  }, [session]);
+
+  useEffect(() => {
+    if (route === 'moderator' && session && !session.isModerator) {
+      setRoute('markets');
+    }
+  }, [route, session]);
 
   const content = useMemo(() => {
     if (route === 'markets') {
@@ -64,7 +80,19 @@ export const App = () => {
       return <LeaderboardScreen />;
     }
 
-    return <MarketLifecyclePanel />;
+    if (session && session.isModerator) {
+      return <MarketLifecyclePanel />;
+    }
+
+    return (
+      <div className="flex flex-col gap-4 rounded-2xl theme-card p-6 text-sm">
+        <h2 className="text-xl font-semibold theme-heading">Moderators only</h2>
+        <p className="theme-subtle">
+          You need moderator access on <span className="font-semibold">r/Destiny</span> to open the
+          lifecycle console.
+        </p>
+      </div>
+    );
   }, [
     route,
     selectedMarketId,
@@ -72,28 +100,34 @@ export const App = () => {
     marketFilter,
     handleSelectMarket,
     setMarketFilter,
+    session,
   ]);
 
   return (
-    <div className="min-h-screen bg-slate-100">
+    <div className="theme-shell min-h-screen">
       <div className="mx-auto flex min-h-screen max-w-5xl flex-col px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex flex-col gap-3 border-b border-slate-200 pb-4">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900">/r/dgg Predictions</h1>
-            <p className="text-sm text-slate-600">
-              Explore markets, track your bets, check the leaderboard, or manage lifecycles.
+        <header className="flex flex-col gap-3 border-b theme-border pb-4">
+          <div className="flex flex-col gap-2">
+            <span className="text-xs uppercase tracking-[0.2em]" style={{ color: themeTokens.textMuted }}>
+              r/Destiny community
+            </span>
+            <h1 className="text-3xl font-bold" style={{ color: themeTokens.textPrimary }}>
+              r/Destiny Predictions
+            </h1>
+            <p className="text-sm" style={{ color: themeTokens.textSecondary }}>
+              Explore markets, track your bets, and follow the leaderboard. Moderators can manage
+              lifecycles with elevated tooling.
             </p>
           </div>
           <nav className="flex flex-wrap gap-2">
-            {NAV_ITEMS.map((item) => (
+            {navItems.map((item) => (
               <button
                 key={item.key}
-                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                  route === item.key
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-white text-gray-700 border border-slate-200 hover:bg-slate-50'
+                className={`btn-base px-4 py-2 text-sm ${
+                  route === item.key ? 'btn-toggle-active' : 'btn-toggle-inactive'
                 }`}
                 onClick={() => handleNavigate(item.key)}
+                disabled={sessionLoading && item.key === 'moderator'}
               >
                 {item.label}
               </button>

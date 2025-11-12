@@ -41,6 +41,12 @@ export interface WalletSnapshot extends Pick<UserBalance, 'userId' | 'subredditI
   readonly activeBets: number;
 }
 
+export interface SessionInfo {
+  readonly userId: string | null;
+  readonly username: string | null;
+  readonly isModerator: boolean;
+}
+
 export interface PlaceBetRequest {
   readonly marketId: MarketId;
   readonly side: BetSide;
@@ -160,3 +166,4 @@ export type ResolveMarketResponseEnvelope = ApiSuccessEnvelope<Market> & {
 };
 export type AuditLogResponseEnvelope = ApiSuccessEnvelope<AuditLogResponse>;
 export type AdjustBalanceResponseEnvelope = ApiSuccessEnvelope<AdjustBalanceResponse>;
+export type SessionResponseEnvelope = ApiSuccessEnvelope<SessionInfo>;

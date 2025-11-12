@@ -54,6 +54,10 @@ export const configKeys = {
   cache: (subredditId: SubredditId) => base('config', subredditId, 'cache'),
 };
 
+export const userDirectoryKeys = {
+  usernames: (subredditId: SubredditId) => base('user-directory', subredditId, 'usernames'),
+};
+
 export const auditKeys = {
   list: (subredditId: SubredditId) => base('audit', subredditId, 'actions'),
   record: (subredditId: SubredditId, actionId: ModeratorActionId) => base('mod-action', subredditId, actionId),

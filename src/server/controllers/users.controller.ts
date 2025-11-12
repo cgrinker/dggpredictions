@@ -27,6 +27,24 @@ export const registerUserRoutes = (
   dependencies: UserControllerDependencies,
 ): void => {
   router.get(
+    '/api/session',
+    asyncHandler(async (req, res) => {
+      const context = req.appContext;
+      if (!context) {
+        throw new ValidationError('Request context unavailable.');
+      }
+
+      res.json({
+        data: {
+          userId: context.userId ?? null,
+          username: context.username ?? null,
+          isModerator: context.isModerator,
+        },
+      });
+    }),
+  );
+
+  router.get(
     '/api/users/me/balance',
     requireUser,
     asyncHandler(async (req, res) => {

@@ -1,0 +1,16 @@
+export const themeTokens = {
+  background: 'var(--surface-base)',
+  card: 'var(--surface-card)',
+  mutedSurface: 'var(--surface-muted)',
+  border: 'var(--border-muted)',
+  borderStrong: 'var(--border-strong)',
+  textPrimary: 'var(--text-primary)',
+  textSecondary: 'var(--text-secondary)',
+  textMuted: 'var(--text-tertiary)',
+  brand: 'var(--brand-500)',
+  brandStrong: 'var(--brand-600)',
+  successBg: 'var(--feedback-success-bg)',
+  successText: 'var(--feedback-success-text)',
+  dangerBg: 'var(--feedback-error-bg)',
+  dangerText: 'var(--feedback-error-text)',
+} as const;

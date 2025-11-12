@@ -41,7 +41,7 @@ export const registerLeaderboardRoutes = (
 
       const result = await dependencies.leaderboardService.getLeaderboard(
         context.subredditId,
-        context.userId,
+        { id: context.userId, username: context.username ?? null },
         options,
       );
 

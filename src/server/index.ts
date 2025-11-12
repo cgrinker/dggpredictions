@@ -11,19 +11,23 @@ import { MarketRepository } from './repositories/market.repository.js';
 import { BetRepository } from './repositories/bet.repository.js';
 import { BalanceRepository } from './repositories/balance.repository.js';
 import { LedgerService } from './services/ledger.service.js';
+import { LedgerRepository } from './repositories/ledger.repository.js';
 import { LeaderboardRepository } from './repositories/leaderboard.repository.js';
 import { LeaderboardService } from './services/leaderboard.service.js';
 import { logger } from './logging.js';
 import { SchedulerService } from './services/scheduler.service.js';
 import { AuditLogService } from './services/audit-log.service.js';
 import { BalanceAdjustmentService } from './services/balance-adjustment.service.js';
+import { UserDirectoryService } from './services/user-directory.service.js';
 
 const configService = new ConfigService();
 const marketRepository = new MarketRepository();
 const betRepository = new BetRepository();
 const balanceRepository = new BalanceRepository();
-const ledgerService = new LedgerService();
+const ledgerRepository = new LedgerRepository();
 const leaderboardRepository = new LeaderboardRepository();
+const userDirectoryService = new UserDirectoryService();
+const ledgerService = new LedgerService(ledgerRepository, leaderboardRepository, userDirectoryService);
 const schedulerService = new SchedulerService();
 const auditLogService = new AuditLogService();
 const balanceAdjustmentService = new BalanceAdjustmentService(
@@ -49,7 +53,11 @@ const betsService = new BetsService(
   ledgerService,
   configService,
 );
-const leaderboardService = new LeaderboardService(leaderboardRepository, configService);
+const leaderboardService = new LeaderboardService(
+  leaderboardRepository,
+  configService,
+  userDirectoryService,
+);
 
 const app = express();
 
@@ -58,7 +66,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
 
 app.use(tracingMiddleware);
-app.use(createContextMiddleware(configService));
+app.use(createContextMiddleware(configService, userDirectoryService));
 
 const router = createAppRouter({
   marketsService,

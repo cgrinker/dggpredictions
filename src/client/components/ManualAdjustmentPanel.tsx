@@ -135,40 +135,38 @@ export const ManualAdjustmentPanel = ({ auditActions, onAdjustmentRecorded }: Ma
   };
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-4 rounded-2xl theme-card p-6">
       <div className="flex flex-col gap-1">
-        <h2 className="text-xl font-semibold text-gray-900">Manual Balance Adjustments</h2>
-        <p className="text-sm text-gray-600">
+        <h2 className="text-xl font-semibold theme-heading">Manual Balance Adjustments</h2>
+        <p className="text-sm theme-subtle">
           Credit or debit participant balances with an audit trail. Require CONFIRM to avoid mistakes.
         </p>
       </div>
 
       {feedback && (
         <div
-          className={`rounded border px-4 py-3 text-sm ${
-            feedback.type === 'success'
-              ? 'border-green-200 bg-green-50 text-green-800'
-              : 'border-red-200 bg-red-50 text-red-800'
+          className={`rounded px-4 py-3 text-sm ${
+            feedback.type === 'success' ? 'feedback-success' : 'feedback-error'
           }`}
         >
           {feedback.message}
         </div>
       )}
 
-      <form className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm" onSubmit={handleSubmit}>
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-sm text-gray-700">
+          <label className="flex flex-col gap-1 text-sm theme-heading">
             Target User ID
             <input
               type="text"
               value={form.targetUserId}
               onChange={(event) => handleChange('targetUserId', event.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className="input-control rounded-md px-3 py-2 text-sm"
               placeholder="t2_abc123"
               required
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm text-gray-700">
+          <label className="flex flex-col gap-1 text-sm theme-heading">
             Amount (points)
             <input
               type="number"
@@ -176,7 +174,7 @@ export const ManualAdjustmentPanel = ({ auditActions, onAdjustmentRecorded }: Ma
               step={1}
               value={form.delta}
               onChange={(event) => handleChange('delta', event.target.value)}
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+              className="input-control rounded-md px-3 py-2 text-sm"
               placeholder="100"
               required
             />
@@ -184,15 +182,13 @@ export const ManualAdjustmentPanel = ({ auditActions, onAdjustmentRecorded }: Ma
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium text-gray-700">Adjustment Type</span>
+          <span className="text-sm font-medium theme-heading">Adjustment Type</span>
           {(['credit', 'debit'] as const).map((mode) => (
             <button
               key={mode}
               type="button"
-              className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-                form.mode === mode
-                  ? 'bg-slate-900 text-white shadow-sm'
-                  : 'bg-white text-gray-700 border border-slate-200 hover:bg-slate-50'
+              className={`btn-base px-4 py-1.5 text-sm ${
+                form.mode === mode ? 'btn-toggle-active' : 'btn-toggle-inactive'
               }`}
               onClick={() => handleModeChange(mode)}
             >
@@ -201,12 +197,12 @@ export const ManualAdjustmentPanel = ({ auditActions, onAdjustmentRecorded }: Ma
           ))}
         </div>
 
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
+        <label className="flex flex-col gap-1 text-sm theme-heading">
           Reason code
           <select
             value={form.reasonCode}
             onChange={(event) => handleChange('reasonCode', event.target.value)}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="input-control rounded-md px-3 py-2 text-sm"
           >
             {REASONS.map((reason) => (
               <option key={reason.value} value={reason.value}>
@@ -216,27 +212,27 @@ export const ManualAdjustmentPanel = ({ auditActions, onAdjustmentRecorded }: Ma
           </select>
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
+        <label className="flex flex-col gap-1 text-sm theme-heading">
           Memo (optional)
           <textarea
             value={form.memo}
             onChange={(event) => handleChange('memo', event.target.value)}
             rows={3}
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500"
+            className="input-control rounded-md px-3 py-2 text-sm"
             placeholder="Describe why this adjustment is necessary"
           />
         </label>
 
-        <label className="flex flex-col gap-1 text-sm text-gray-700">
+        <label className="flex flex-col gap-1 text-sm theme-heading">
           Confirmation
           <input
             type="text"
             value={form.confirmation}
             onChange={(event) => handleChange('confirmation', event.target.value)}
-            className="rounded-md border border-red-200 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+            className="input-control rounded-md px-3 py-2 text-sm"
             placeholder="Type CONFIRM"
           />
-          <span className="text-xs text-gray-500">
+          <span className="text-xs theme-muted">
             This safeguard prevents accidental adjustments. Only moderators can submit this form.
           </span>
         </label>
@@ -244,14 +240,14 @@ export const ManualAdjustmentPanel = ({ auditActions, onAdjustmentRecorded }: Ma
         <div className="flex items-center gap-3">
           <button
             type="submit"
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="btn-base btn-primary px-4 py-2 text-sm"
             disabled={isSubmitting}
           >
             {isSubmitting ? 'Recording…' : 'Record Adjustment'}
           </button>
           <button
             type="button"
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-slate-100"
+            className="btn-base btn-secondary px-3 py-2 text-sm"
             onClick={() => {
               setForm(DEFAULT_FORM);
               setFeedback(null);
@@ -264,9 +260,9 @@ export const ManualAdjustmentPanel = ({ auditActions, onAdjustmentRecorded }: Ma
       </form>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-lg font-semibold text-gray-900">Recent Adjustments</h3>
+        <h3 className="text-lg font-semibold theme-heading">Recent Adjustments</h3>
         {recentAdjustments.length === 0 ? (
-          <p className="text-sm text-gray-600">No manual adjustments recorded yet.</p>
+          <p className="text-sm theme-subtle">No manual adjustments recorded yet.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {recentAdjustments.map((entry) => {
@@ -276,40 +272,40 @@ export const ManualAdjustmentPanel = ({ auditActions, onAdjustmentRecorded }: Ma
               const reason = resolvePayloadString(payload, 'reasonCode');
               const memo = resolvePayloadString(payload, 'memo');
               return (
-                <li key={entry.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex flex-col gap-1 text-sm text-gray-700">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-600">
-                      <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-medium text-gray-700">
+                <li key={entry.id} className="rounded-xl theme-card p-4">
+                  <div className="flex flex-col gap-1 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 text-xs theme-muted">
+                      <span className="badge-soft px-2 py-0.5 font-medium">
                         {entry.targetUserId ?? 'unknown'}
                       </span>
                       {mode && (
-                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-gray-600">
+                        <span className="badge-soft px-2 py-0.5">
                           {mode.toUpperCase()}
                         </span>
                       )}
                       {reason && (
-                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-gray-600">
+                        <span className="badge-soft px-2 py-0.5">
                           {reason}
                         </span>
                       )}
                     </div>
                     <p>
-                      <span className="font-semibold text-gray-900">Moderator:</span>{' '}
+                      <span className="font-semibold theme-heading">Moderator:</span>{' '}
                       {entry.performedByUsername || entry.performedBy}
                     </p>
                     <p>
-                      <span className="font-semibold text-gray-900">When:</span>{' '}
+                      <span className="font-semibold theme-heading">When:</span>{' '}
                       {formatDateTime(entry.createdAt)}
                     </p>
                     {amount !== null && (
                       <p>
-                        <span className="font-semibold text-gray-900">Amount:</span>{' '}
+                        <span className="font-semibold theme-heading">Amount:</span>{' '}
                         {formatPoints(amount)} pts
                       </p>
                     )}
                     {memo && (
                       <p>
-                        <span className="font-semibold text-gray-900">Memo:</span> {memo}
+                        <span className="font-semibold theme-heading">Memo:</span> {memo}
                       </p>
                     )}
                   </div>

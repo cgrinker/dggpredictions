@@ -13,6 +13,7 @@ import { LeaderboardRepository } from '../repositories/leaderboard.repository.js
 import { DEFAULT_LEADERBOARD_WINDOWS } from '../config/constants.js';
 import { createLedgerEntryId } from '../utils/id.js';
 import { nowIso } from '../utils/time.js';
+import { UserDirectoryService } from './user-directory.service.js';
 
 interface LedgerEntryOptions {
   readonly subredditId: SubredditId;
@@ -28,13 +29,16 @@ interface LedgerEntryOptions {
 export class LedgerService {
   private readonly repository: LedgerRepository;
   private readonly leaderboards: LeaderboardRepository;
+  private readonly userDirectory: UserDirectoryService;
 
   constructor(
     repository = new LedgerRepository(),
     leaderboards = new LeaderboardRepository(),
+    userDirectory = new UserDirectoryService(),
   ) {
     this.repository = repository;
     this.leaderboards = leaderboards;
+    this.userDirectory = userDirectory;
   }
 
   async record(tx: TxClientLike, options: LedgerEntryOptions): Promise<LedgerEntry> {
@@ -58,6 +62,10 @@ export class LedgerService {
     const entry: LedgerEntry = base;
 
     await this.repository.create(tx, entry);
+    const usernameFromMetadata = this.extractUsername(entry.metadata);
+    if (usernameFromMetadata) {
+      await this.userDirectory.rememberUser(entry.subredditId, entry.userId, usernameFromMetadata);
+    }
     await this.updateLeaderboards(tx, entry);
     return entry;
   }
@@ -68,13 +76,32 @@ export class LedgerService {
       return;
     }
 
+    const usernameFromMetadata = this.extractUsername(entry.metadata);
+    const resolvedUsername =
+      usernameFromMetadata ?? (await this.userDirectory.resolveUsername(entry.subredditId, entry.userId));
+
     await Promise.all(
       DEFAULT_LEADERBOARD_WINDOWS.map((window) =>
         this.leaderboards.increment(tx, entry.subredditId, window, entry.userId, amount, {
           delta: amount,
+          ...(resolvedUsername ? { username: resolvedUsername } : {}),
         }),
       ),
     );
+  }
+
+  private extractUsername(metadata: LedgerEntry['metadata']): string | null {
+    if (!metadata) {
+      return null;
+    }
+
+    const raw = metadata.username;
+    if (typeof raw !== 'string') {
+      return null;
+    }
+
+    const normalized = raw.trim();
+    return normalized.length > 0 ? normalized : null;
   }
 
   private resolveLeaderboardDelta(type: LedgerEntryType, delta: Points): Points {

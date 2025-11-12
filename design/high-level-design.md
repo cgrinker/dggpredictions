@@ -164,6 +164,7 @@ _Note: These are internal Devvit Web routes mounted under `/api/*` (or `/interna
 - Prototype archival maintenance UI in staging to ensure Devvit platform assumptions hold before production rollout.
 
 - ✅ Participant-facing flows (markets lobby, detail, betting, wallet, bets history, leaderboard) are live in the Devvit client, backed by typed hooks and `/api/*` endpoints.
+- ✅ Leaderboard listings now resolve Reddit usernames via the shared user-directory cache, eliminating `user:t2_*` fallbacks in client views.
 - ✅ Server services cover market lifecycle end-to-end (create, publish, close, resolve, void) with archival workflows wired to Redis repositories and audit logging for moderator actions.
 - ✅ Moderator lifecycle console now includes draft creation, publish/close/resolve/void controls, recent audit log visibility, and the manual balance adjustment workflow.
 - ✅ Moderator balance adjustments are processed through a dedicated service that records ledger entries, snapshots the before/after state, and exposes the workflow in the console.

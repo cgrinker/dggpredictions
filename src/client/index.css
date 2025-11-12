@@ -1,1 +1,197 @@
 @import 'tailwindcss';
+
+:root {
+	color-scheme: light dark;
+	--brand-500: #1c6df2;
+	--brand-600: #1554d4;
+	--brand-700: #0f3da6;
+	--surface-base: #eef2fb;
+	--surface-card: #ffffff;
+	--surface-muted: #e2e8fa;
+	--border-muted: rgba(33, 56, 110, 0.16);
+	--border-strong: rgba(33, 56, 110, 0.28);
+	--text-primary: #0b162d;
+	--text-secondary: #435a86;
+	--text-tertiary: #5f759f;
+	--feedback-success-bg: #e4f9f2;
+	--feedback-success-border: #9feddb;
+	--feedback-success-text: #0e7052;
+	--feedback-error-bg: #fde8ed;
+	--feedback-error-border: #f7b2c1;
+	--feedback-error-text: #84293e;
+	--control-bg: #ffffff;
+	--control-border: rgba(33, 56, 110, 0.18);
+	--control-border-focused: rgba(28, 100, 242, 0.45);
+	--control-shadow: 0 16px 32px rgba(15, 35, 75, 0.08);
+	--badge-bg: rgba(28, 100, 242, 0.12);
+	--badge-text: #2c6deb;
+	--code-bg: #0d172a;
+	--code-text: #dbeafe;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--surface-base: #040b18;
+		--surface-card: #0b142a;
+		--surface-muted: #121d36;
+		--border-muted: rgba(130, 168, 239, 0.2);
+		--border-strong: rgba(130, 168, 239, 0.32);
+		--text-primary: #f4f7ff;
+		--text-secondary: #9ab4e3;
+		--text-tertiary: #7f96c6;
+		--feedback-success-bg: rgba(45, 214, 185, 0.16);
+		--feedback-success-border: rgba(45, 214, 185, 0.46);
+		--feedback-success-text: #7ef2d0;
+		--feedback-error-bg: rgba(255, 125, 169, 0.16);
+		--feedback-error-border: rgba(255, 125, 169, 0.35);
+		--feedback-error-text: #ffc9de;
+		--control-bg: rgba(12, 23, 45, 0.95);
+		--control-border: rgba(130, 168, 239, 0.28);
+		--control-border-focused: rgba(80, 148, 255, 0.6);
+		--control-shadow: 0 22px 44px rgba(4, 10, 26, 0.55);
+		--badge-bg: rgba(49, 95, 204, 0.28);
+		--badge-text: #cfe0ff;
+		--code-bg: #050d22;
+		--code-text: #bfdbfe;
+	}
+}
+
+body {
+	background-color: var(--surface-base);
+	color: var(--text-primary);
+	font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.theme-shell {
+	background: var(--surface-base);
+	color: var(--text-primary);
+}
+
+.theme-card {
+	background: var(--surface-card);
+	border: 1px solid var(--border-muted);
+	box-shadow: var(--control-shadow);
+}
+
+.theme-border {
+	border-color: var(--border-muted);
+}
+
+.theme-border-strong {
+	border-color: var(--border-strong);
+}
+
+.theme-heading {
+	color: var(--text-primary);
+}
+
+.theme-subtle {
+	color: var(--text-secondary);
+}
+
+.theme-muted {
+	color: var(--text-tertiary);
+}
+
+.feedback-success {
+	background: var(--feedback-success-bg);
+	border: 1px solid var(--feedback-success-border);
+	color: var(--feedback-success-text);
+}
+
+.feedback-error {
+	background: var(--feedback-error-bg);
+	border: 1px solid var(--feedback-error-border);
+	color: var(--feedback-error-text);
+}
+
+.input-control {
+	background: var(--control-bg);
+	border: 1px solid var(--control-border);
+	color: var(--text-primary);
+}
+
+.input-control::placeholder {
+	color: var(--text-tertiary);
+}
+
+.input-control:focus-visible {
+	outline: none;
+	border-color: var(--control-border-focused);
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-500) 25%, transparent);
+}
+
+.btn-base {
+	border-radius: 0.5rem;
+	font-weight: 600;
+	transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.btn-primary {
+	background: var(--brand-500);
+	color: #ffffff;
+	border: 1px solid transparent;
+}
+
+.btn-primary:hover {
+	background: var(--brand-600);
+}
+
+.btn-primary:disabled {
+	opacity: 0.6;
+}
+
+.btn-secondary {
+	background: transparent;
+	color: var(--text-secondary);
+	border: 1px solid var(--border-muted);
+}
+
+.btn-secondary:hover {
+	background: var(--surface-muted);
+	color: var(--text-primary);
+}
+
+.btn-ghost {
+	background: transparent;
+	color: var(--text-secondary);
+	border: 1px solid var(--border-muted);
+}
+
+.btn-ghost:hover {
+	background: var(--surface-muted);
+	color: var(--text-primary);
+}
+
+.btn-toggle-active {
+	background: var(--brand-500);
+	color: #ffffff;
+	border: 1px solid transparent;
+	box-shadow: 0 12px 24px rgba(28, 100, 242, 0.25);
+}
+
+.btn-toggle-inactive {
+	background: transparent;
+	color: var(--text-secondary);
+	border: 1px solid var(--border-muted);
+}
+
+.btn-toggle-inactive:hover {
+	background: var(--surface-muted);
+	color: var(--text-primary);
+}
+
+.badge-soft {
+	background: var(--badge-bg);
+	color: var(--badge-text);
+	border: 1px solid var(--border-muted);
+	border-radius: 999px;
+	font-weight: 600;
+}
+
+.code-block {
+	background: var(--code-bg);
+	color: var(--code-text);
+	border-radius: 0.75rem;
+	padding: 0.75rem 1rem;
+}
