@@ -7,6 +7,7 @@ _Last updated: 2025-11-12_
 - Archival workflows log detailed audit entries (`ARCHIVE_MARKETS`) including before/after snapshots and system fallbacks.
 - Metrics and incident reporting endpoints back the moderator console widgets.
 - Scheduler prune job available via `/internal/scheduler/market-prune`, removing aged archived markets and logging `PRUNE_MARKETS` actions.
+- Moderator console adds purge confirmation modal, targeted audit filters (retention, config, resolutions), and logs `CONFIG_UPDATE` actions.
 
 ## Hardening Checklist
 - [x] Enforce request validation for all moderator write endpoints (publish, close, resolve, void, archive).

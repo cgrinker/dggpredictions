@@ -89,6 +89,9 @@ const ACTION_LABELS: Readonly<Record<ModeratorActionLogEntry['action'], string>>
   RESOLVE_MARKET: 'Resolved Market',
   VOID_MARKET: 'Voided Market',
   ADJUST_BALANCE: 'Adjusted Balance',
+  CONFIG_UPDATE: 'Updated Configuration',
+  ARCHIVE_MARKETS: 'Archived Markets',
+  PRUNE_MARKETS: 'Pruned Markets',
 };
 
 const formatActionLabel = (action: ModeratorActionLogEntry['action']): string =>
@@ -177,6 +180,40 @@ const FEATURE_FLAG_OPTIONS: ReadonlyArray<{
   },
 ];
 
+type AuditFilterKey = 'all' | 'retention' | 'config' | 'resolutions';
+
+const AUDIT_FILTER_OPTIONS: ReadonlyArray<{
+  readonly key: AuditFilterKey;
+  readonly label: string;
+  readonly description: string;
+  readonly actions: ReadonlyArray<ModeratorActionLogEntry['action']>;
+}> = [
+  {
+    key: 'all',
+    label: 'All Actions',
+    description: 'Show the full moderator audit stream.',
+    actions: [],
+  },
+  {
+    key: 'retention',
+    label: 'Retention',
+    description: 'Focus on archive and prune activity.',
+    actions: ['ARCHIVE_MARKETS', 'PRUNE_MARKETS'],
+  },
+  {
+    key: 'config',
+    label: 'Config Updates',
+    description: 'Surface runtime configuration overrides.',
+    actions: ['CONFIG_UPDATE'],
+  },
+  {
+    key: 'resolutions',
+    label: 'Resolutions',
+    description: 'Highlight market resolution and incident work.',
+    actions: ['RESOLVE_MARKET'],
+  },
+];
+
 interface ArchiveFormState {
   readonly olderThanDays: string;
   readonly statuses: Set<'closed' | 'resolved' | 'void'>;
@@ -243,6 +280,8 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
     refetch: refetchAudit,
   } = useAuditLog(useMemo(() => ({ limit: 50 }), []));
 
+  const [auditFilter, setAuditFilter] = useState<AuditFilterKey>('all');
+
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [resolutionDrafts, setResolutionDrafts] = useState<Record<string, ResolutionDraft>>({});
@@ -272,6 +311,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
   const [configError, setConfigError] = useState<string | null>(null);
   const [configSaving, setConfigSaving] = useState(false);
   const [configSuccess, setConfigSuccess] = useState<string | null>(null);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([refetchDrafts(), refetchOpen(), refetchClosed(), refetchAudit()]);
@@ -377,6 +417,20 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
     [draftsError, openError, closedError, auditError],
   );
 
+  const activeAuditFilter = useMemo(() => {
+    const fallback = AUDIT_FILTER_OPTIONS[0]!;
+    return AUDIT_FILTER_OPTIONS.find((option) => option.key === auditFilter) ?? fallback;
+  }, [auditFilter]);
+
+  const filteredAuditActions = useMemo(() => {
+    if (activeAuditFilter.actions.length === 0) {
+      return auditActions;
+    }
+
+    const allowed = new Set(activeAuditFilter.actions);
+    return auditActions.filter((entry) => allowed.has(entry.action));
+  }, [activeAuditFilter, auditActions]);
+
   const loadMaintenanceData = useCallback(async () => {
     setMaintenanceFeedback(null);
     setMetricsState((state) => ({ ...state, loading: true, error: null }));
@@ -415,7 +469,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
     }
   }, [activeTab, maintenanceInitialized, loadMaintenanceData]);
 
-  const handleArchive = useCallback(
+  const submitArchive = useCallback(
     async (dryRun: boolean) => {
       setArchiveLoading(true);
       setArchiveError(null);
@@ -480,6 +534,34 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
     [archiveForm, refetchAudit, refetchClosed, refetchDrafts, refetchOpen],
   );
 
+  const handleArchiveDryRun = useCallback(() => {
+    void submitArchive(true);
+  }, [submitArchive]);
+
+  const handleArchiveRequest = useCallback(() => {
+    if (!archiveResult || !archiveResult.dryRun) {
+      setArchiveError('Run a dry-run first to review eligible markets.');
+      return;
+    }
+
+    if (archiveResult.archivedMarkets === 0) {
+      setArchiveError('Dry-run reported no eligible markets to archive.');
+      return;
+    }
+
+    setArchiveError(null);
+    setArchiveConfirmOpen(true);
+  }, [archiveResult]);
+
+  const handleArchiveConfirm = useCallback(() => {
+    setArchiveConfirmOpen(false);
+    void submitArchive(false);
+  }, [submitArchive]);
+
+  const handleArchiveCancel = useCallback(() => {
+    setArchiveConfirmOpen(false);
+  }, []);
+
   const loadConfig = useCallback(async () => {
     setConfigLoading(true);
     setConfigError(null);
@@ -539,6 +621,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
     setMaintenanceFeedback(null);
     setArchiveError(null);
     setArchiveResult(null);
+    setArchiveConfirmOpen(false);
   }, []);
 
   const handleMaintenanceRefresh = useCallback(() => {
@@ -1008,13 +1091,34 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
               Latest audit log entries from the backend.{auditFetchedAt ? ` Updated ${formatDateTime(auditFetchedAt)}.` : ''}
             </p>
           </div>
+
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {AUDIT_FILTER_OPTIONS.map((option) => {
+              const active = option.key === auditFilter;
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  className={`btn-base px-3 py-1.5 ${active ? 'btn-toggle-active' : 'btn-toggle-inactive'}`}
+                  onClick={() => setAuditFilter(option.key)}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-xs theme-muted">{activeAuditFilter.description}</p>
+
           {auditLoading && auditActions.length === 0 ? (
             <p className="text-sm theme-subtle">Loading audit log…</p>
-          ) : auditActions.length === 0 ? (
-            <p className="text-sm theme-subtle">No moderator actions recorded yet.</p>
+          ) : filteredAuditActions.length === 0 ? (
+            <p className="text-sm theme-subtle">
+              No actions matched the selected filter. Try expanding to “All Actions”.
+            </p>
           ) : (
             <ul className="flex flex-col gap-3">
-              {auditActions.map((entry) => {
+              {filteredAuditActions.map((entry) => {
                 const badges = buildActionBadges(entry);
                 const payloadPreview = formatPayloadPreview(entry.payload);
                 return (
@@ -1055,6 +1159,62 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             </ul>
           )}
         </section>
+        {archiveConfirmOpen && archiveResult && archiveResult.dryRun && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-6">
+            <div className="w-full max-w-xl rounded-2xl theme-card p-6 shadow-2xl">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <h4 className="text-lg font-semibold theme-heading">Confirm archive purge</h4>
+                  <p className="text-sm theme-subtle">
+                    Archiving will permanently remove {archiveResult.archivedMarkets} market(s) and their associated bets. Review the summary below before continuing.
+                  </p>
+                </div>
+
+                <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 text-sm theme-muted">
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide theme-subtle">Eligible markets</dt>
+                    <dd className="text-base font-semibold theme-heading">{archiveResult.archivedMarkets}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide theme-subtle">Skipped</dt>
+                    <dd className="text-base font-semibold theme-heading">{archiveResult.skippedMarkets}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide theme-subtle">Processed sample</dt>
+                    <dd className="text-base font-semibold theme-heading">{archiveResult.processedMarkets}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide theme-subtle">Cutoff timestamp</dt>
+                    <dd className="text-base font-semibold theme-heading">{formatDateTime(archiveResult.cutoffIso)}</dd>
+                  </div>
+                </dl>
+
+                <p className="text-xs theme-muted">
+                  This run will apply the same filters used in the latest dry-run. Archiving cannot be undone.
+                </p>
+
+                <div className="flex flex-wrap justify-end gap-3">
+                  <button
+                    type="button"
+                    className="btn-base btn-ghost px-4 py-2 text-sm"
+                    onClick={handleArchiveCancel}
+                    disabled={archiveLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-base btn-primary px-4 py-2 text-sm"
+                    onClick={handleArchiveConfirm}
+                    disabled={archiveLoading}
+                  >
+                    {archiveLoading ? 'Archiving…' : 'Confirm purge'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1239,7 +1399,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             <button
               type="button"
               className="btn-base btn-secondary px-4 py-2 text-sm"
-              onClick={() => void handleArchive(true)}
+              onClick={handleArchiveDryRun}
               disabled={archiveLoading}
             >
               {archiveLoading ? 'Running…' : 'Dry Run'}
@@ -1247,7 +1407,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             <button
               type="button"
               className="btn-base btn-primary px-4 py-2 text-sm"
-              onClick={() => void handleArchive(false)}
+              onClick={handleArchiveRequest}
               disabled={archiveLoading}
             >
               {archiveLoading ? 'Archiving…' : 'Archive Markets'}

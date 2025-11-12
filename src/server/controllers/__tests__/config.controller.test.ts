@@ -9,6 +9,7 @@ import type { RequestContext } from '../../context.js';
 import type { ConfigService } from '../../services/config.service.js';
 import type { AppConfig } from '../../../shared/types/config.js';
 import type { SubredditId, UserId } from '../../../shared/types/entities.js';
+import type { AuditLogService } from '../../services/audit-log.service.js';
 
 type VitestMock = ReturnType<typeof vi.fn>;
 
@@ -43,12 +44,17 @@ const createDependencies = () => {
     updateConfig: vi.fn(),
     clearOverride: vi.fn(),
   };
+  const auditLogService: Partial<AuditLogService> = {
+    recordAction: vi.fn(),
+  };
 
   return {
     dependencies: {
       configService: configService as ConfigService,
+      auditLogService: auditLogService as AuditLogService,
     } satisfies ConfigControllerDependencies,
     configService,
+    auditLogService,
   };
 };
 
@@ -80,7 +86,7 @@ afterEach(() => {
 describe('ConfigController', () => {
   describe('GET /api/internal/config', () => {
     it('returns current config and override status', async () => {
-      const { dependencies, configService } = createDependencies();
+      const { dependencies, configService, auditLogService } = createDependencies();
       (configService.getConfig as VitestMock).mockResolvedValue(sampleConfig);
       (configService.hasOverride as VitestMock).mockResolvedValue(true);
 
@@ -94,12 +100,13 @@ describe('ConfigController', () => {
 
       expect(configService.getConfig).toHaveBeenCalledWith(defaultContext.subredditId);
       expect(configService.hasOverride).toHaveBeenCalledWith(defaultContext.subredditId);
+      expect(auditLogService.recordAction as VitestMock).not.toHaveBeenCalled();
     });
   });
 
   describe('POST /api/internal/config', () => {
     it('updates overrides and returns fresh config', async () => {
-      const { dependencies, configService } = createDependencies();
+      const { dependencies, configService, auditLogService } = createDependencies();
       (configService.updateConfig as VitestMock).mockResolvedValue(sampleConfig);
 
       const app = createApp(dependencies);
@@ -113,6 +120,17 @@ describe('ConfigController', () => {
         defaultContext.subredditId,
         sampleConfig,
       );
+      expect(auditLogService.recordAction).toHaveBeenCalledWith(defaultContext.subredditId, {
+        performedBy: defaultContext.userId,
+        performedByUsername: defaultContext.username,
+        action: 'CONFIG_UPDATE',
+        marketId: null,
+        payload: {
+          mode: 'update',
+          overridesApplied: true,
+          config: sampleConfig,
+        },
+      });
     });
   });
 
@@ -128,7 +146,7 @@ describe('ConfigController', () => {
         },
       };
 
-      const { dependencies, configService } = createDependencies();
+  const { dependencies, configService, auditLogService } = createDependencies();
       (configService.clearOverride as VitestMock).mockResolvedValue(resetConfig);
 
       const app = createApp(dependencies);
@@ -139,6 +157,17 @@ describe('ConfigController', () => {
       expect(response.body.data.config).toEqual(resetConfig);
       expect(response.body.data.overridesApplied).toBe(false);
       expect(configService.clearOverride).toHaveBeenCalledWith(defaultContext.subredditId);
+      expect(auditLogService.recordAction).toHaveBeenCalledWith(defaultContext.subredditId, {
+        performedBy: defaultContext.userId,
+        performedByUsername: defaultContext.username,
+        action: 'CONFIG_UPDATE',
+        marketId: null,
+        payload: {
+          mode: 'reset',
+          overridesApplied: false,
+          config: resetConfig,
+        },
+      });
     });
   });
 });

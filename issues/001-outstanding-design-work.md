@@ -47,10 +47,10 @@ Tracked from the latest review of the design documents (2025-11-11).
 - [ ] Explore long-term export/backup options for deep history beyond Redis quotas (defer until allow-list response).
 
 ## Moderation Workflow & Compliance
-- [ ] Implement archival controls with dry-run reporting directly in the moderator console.
-	- [ ] Confirmation + summary modal before executing purge.
-- [ ] Broaden audit-log visibility for maintenance actions and retention operations.
-	- [ ] Introduce audit filter for `ARCHIVE_MARKETS`, `CONFIG_UPDATE`, incident resolutions.
+- [x] Implement archival controls with dry-run reporting directly in the moderator console.
+	- [x] Confirmation + summary modal before executing purge.
+- [x] Broaden audit-log visibility for maintenance actions and retention operations.
+	- [x] Introduce audit filter for `ARCHIVE_MARKETS`, `CONFIG_UPDATE`, incident resolutions.
 
 ## Observability, Operations & Testing
 - [ ] Ship metrics counters and incident surfacing in the moderator console.

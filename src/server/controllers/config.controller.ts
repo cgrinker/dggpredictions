@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import { AppConfigSchema } from '../../shared/schema/config.schema.js';
 import type { ConfigService } from '../services/config.service.js';
+import type { AuditLogService } from '../services/audit-log.service.js';
 import { ensureValid } from '../../shared/validation.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { requireModerator } from '../middleware/auth.js';
 import { ValidationError } from '../errors.js';
 import type { ApiSuccessEnvelope } from '../../shared/types/dto.js';
+import type { UserId } from '../../shared/types/entities.js';
+import type { RequestContext } from '../context.js';
 
 interface ConfigResponseBody {
   readonly config: Awaited<ReturnType<ConfigService['getConfig']>>;
@@ -14,7 +17,27 @@ interface ConfigResponseBody {
 
 export interface ConfigControllerDependencies {
   readonly configService: ConfigService;
+  readonly auditLogService: AuditLogService;
 }
+
+const SYSTEM_CONFIG_ACTOR_ID = 'system:config' as UserId;
+const SYSTEM_CONFIG_ACTOR_USERNAME = 'config-service';
+
+const resolveConfigActor = (
+  context: RequestContext,
+): { readonly id: UserId; readonly username: string } => {
+  if (context.userId) {
+    return {
+      id: context.userId,
+      username: context.username ?? 'unknown-moderator',
+    };
+  }
+
+  return {
+    id: SYSTEM_CONFIG_ACTOR_ID,
+    username: SYSTEM_CONFIG_ACTOR_USERNAME,
+  };
+};
 
 const buildResponse = (config: Awaited<ReturnType<ConfigService['getConfig']>>, overridesApplied: boolean) =>
   ({
@@ -28,6 +51,8 @@ export const registerConfigRoutes = (
   router: Router,
   dependencies: ConfigControllerDependencies,
 ): void => {
+  const { configService, auditLogService } = dependencies;
+
   router.get(
     '/api/internal/config',
     requireModerator,
@@ -37,8 +62,8 @@ export const registerConfigRoutes = (
         throw new ValidationError('Request context unavailable.');
       }
 
-      const config = await dependencies.configService.getConfig(context.subredditId);
-      const overridesApplied = await dependencies.configService.hasOverride(context.subredditId);
+      const config = await configService.getConfig(context.subredditId);
+      const overridesApplied = await configService.hasOverride(context.subredditId);
       res.json(buildResponse(config, overridesApplied));
     }),
   );
@@ -58,7 +83,21 @@ export const registerConfigRoutes = (
         'Invalid configuration payload.',
       );
 
-      const config = await dependencies.configService.updateConfig(context.subredditId, payload);
+      const config = await configService.updateConfig(context.subredditId, payload);
+
+      const actor = resolveConfigActor(context);
+      await auditLogService.recordAction(context.subredditId, {
+        performedBy: actor.id,
+        performedByUsername: actor.username,
+        action: 'CONFIG_UPDATE',
+        marketId: null,
+        payload: {
+          mode: 'update',
+          overridesApplied: true,
+          config,
+        },
+      });
+
       res.json(buildResponse(config, true));
     }),
   );
@@ -72,7 +111,21 @@ export const registerConfigRoutes = (
         throw new ValidationError('Request context unavailable.');
       }
 
-      const config = await dependencies.configService.clearOverride(context.subredditId);
+      const config = await configService.clearOverride(context.subredditId);
+
+      const actor = resolveConfigActor(context);
+      await auditLogService.recordAction(context.subredditId, {
+        performedBy: actor.id,
+        performedByUsername: actor.username,
+        action: 'CONFIG_UPDATE',
+        marketId: null,
+        payload: {
+          mode: 'reset',
+          overridesApplied: false,
+          config,
+        },
+      });
+
       res.json(buildResponse(config, false));
     }),
   );
