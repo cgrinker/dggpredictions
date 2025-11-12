@@ -130,6 +130,8 @@ export const ArchiveMarketsRequestSchema = z
     statuses: z.array(ArchivableStatuses).min(1).optional(),
     maxMarkets: z.number().int().min(1).max(5_000).optional(),
     dryRun: z.boolean().optional(),
+    page: z.number().int().min(1).optional(),
+    pageSize: z.number().int().min(1).max(500).optional(),
   })
   .strict();
 

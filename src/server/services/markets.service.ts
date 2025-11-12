@@ -90,6 +90,8 @@ interface ArchiveMarketsOptions {
   readonly moderatorId?: UserId | null;
   readonly maxMarkets?: number;
   readonly dryRun?: boolean;
+  readonly page?: number;
+  readonly pageSize?: number;
 }
 
 interface ArchiveMarketsResult {
@@ -98,6 +100,12 @@ interface ArchiveMarketsResult {
   readonly skippedMarkets: number;
   readonly cutoffIso: string;
   readonly dryRun: boolean;
+  readonly candidates: readonly MarketSummary[];
+  readonly pagination: {
+    readonly page: number;
+    readonly pageSize: number;
+    readonly total: number;
+  };
 }
 
 interface ListMarketsOptions {
@@ -455,53 +463,92 @@ export class MarketsService {
 
     const cutoffMillis = options.cutoff.getTime();
     const maxArchives = options.maxMarkets ?? Number.POSITIVE_INFINITY;
+    const page = Math.max(1, options.page ?? 1);
+    const pageSize = Math.max(1, Math.min(500, options.pageSize ?? 50));
+    const pageStartIndex = (page - 1) * pageSize;
+    const candidateSummaries: MarketSummary[] = [];
+
     let archivedCount = 0;
     let processedCount = 0;
     let skippedCount = 0;
+    let eligibleCount = 0;
+
+    const shouldLimit = Number.isFinite(maxArchives);
+    const maxCount = shouldLimit ? Number(maxArchives) : Number.POSITIVE_INFINITY;
+
+    let stopProcessing = false;
 
     for (const status of statuses) {
-      if (archivedCount >= maxArchives) {
+      if (stopProcessing) {
         break;
       }
 
-      const pageSize = Number.isFinite(maxArchives)
-        ? Math.max(1, Math.min(200, Math.ceil(maxArchives - archivedCount)))
+      let statusPage = 1;
+      const chunkSize = shouldLimit
+        ? Math.max(1, Math.min(200, Math.ceil(maxCount - archivedCount)))
         : 200;
 
-      const { markets } = await this.markets.list(subredditId, {
-        status,
-        page: 1,
-        pageSize,
-      });
+      while (!stopProcessing) {
+        const { markets } = await this.markets.list(subredditId, {
+          status,
+          page: statusPage,
+          pageSize: chunkSize,
+        });
 
-      for (const market of markets) {
-        processedCount += 1;
-
-        const lifecycleTimestamp = this.getLifecycleTimestamp(market);
-        if (lifecycleTimestamp === null || lifecycleTimestamp > cutoffMillis) {
-          skippedCount += 1;
-          continue;
-        }
-
-        if (this.isAlreadyArchived(market)) {
-          skippedCount += 1;
-          continue;
-        }
-
-        if (archivedCount >= maxArchives) {
+        if (markets.length === 0) {
           break;
         }
 
-        if (options.dryRun) {
+        for (const market of markets) {
+          if (archivedCount >= maxCount) {
+            stopProcessing = true;
+            break;
+          }
+
+          processedCount += 1;
+
+          const lifecycleTimestamp = this.getLifecycleTimestamp(market);
+          if (lifecycleTimestamp === null || lifecycleTimestamp > cutoffMillis) {
+            skippedCount += 1;
+            continue;
+          }
+
+          if (this.isAlreadyArchived(market)) {
+            skippedCount += 1;
+            continue;
+          }
+
+          if (eligibleCount >= pageStartIndex && candidateSummaries.length < pageSize) {
+            candidateSummaries.push(this.toMarketSummary(market));
+          }
+
+          eligibleCount += 1;
+
+          if (options.dryRun) {
+            archivedCount += 1;
+            continue;
+          }
+
+          const bets = await this.bets.listByMarket(subredditId, market.id);
+          await this.archiveMarketData(subredditId, market, bets, {
+            moderatorId: options.moderatorId ?? null,
+          });
           archivedCount += 1;
-          continue;
         }
 
-        const bets = await this.bets.listByMarket(subredditId, market.id);
-        await this.archiveMarketData(subredditId, market, bets, {
-          moderatorId: options.moderatorId ?? null,
-        });
-        archivedCount += 1;
+        if (!stopProcessing && archivedCount >= maxCount) {
+          stopProcessing = true;
+        }
+
+        if (stopProcessing) {
+          break;
+        }
+
+        if (markets.length < chunkSize) {
+          break;
+        }
+
+        statusPage += 1;
       }
     }
 
@@ -511,6 +558,12 @@ export class MarketsService {
       skippedMarkets: skippedCount,
       cutoffIso: options.cutoff.toISOString(),
       dryRun: Boolean(options.dryRun),
+      candidates: candidateSummaries,
+      pagination: {
+        page,
+        pageSize,
+        total: eligibleCount,
+      },
     } satisfies ArchiveMarketsResult;
   }
 

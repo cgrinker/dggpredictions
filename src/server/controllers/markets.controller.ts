@@ -293,6 +293,8 @@ export const registerMarketRoutes = (
         ...(body.statuses ? { statuses: body.statuses } : {}),
         ...(body.maxMarkets !== undefined ? { maxMarkets: body.maxMarkets } : {}),
         ...(body.dryRun !== undefined ? { dryRun: body.dryRun } : {}),
+        ...(body.page !== undefined ? { page: body.page } : {}),
+        ...(body.pageSize !== undefined ? { pageSize: body.pageSize } : {}),
         moderatorId: context.userId ?? null,
       };
 

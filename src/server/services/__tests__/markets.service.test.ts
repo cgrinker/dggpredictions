@@ -664,6 +664,9 @@ describe('MarketsService archive', () => {
     expect(result.skippedMarkets).toBe(2);
     expect(result.processedMarkets).toBe(3);
     expect(result.dryRun).toBe(false);
+  expect(result.pagination).toEqual({ page: 1, pageSize: 50, total: 1 });
+  expect(result.candidates).toHaveLength(1);
+  expect(result.candidates[0].id).toBe(archivable.id);
 
     expect((betRepo.listByMarket as VitestMock)).toHaveBeenCalledTimes(1);
     expect((betRepo.delete as VitestMock)).toHaveBeenCalledTimes(betsForArchivable.length);
@@ -706,6 +709,9 @@ describe('MarketsService archive', () => {
     expect(result.skippedMarkets).toBe(0);
     expect(result.processedMarkets).toBe(1);
     expect(result.dryRun).toBe(true);
+  expect(result.pagination).toEqual({ page: 1, pageSize: 50, total: 1 });
+  expect(result.candidates).toHaveLength(1);
+  expect(result.candidates[0].id).toBe(archivable.id);
 
     expect(betRepo.listByMarket).not.toHaveBeenCalled();
     expect(betRepo.delete).not.toHaveBeenCalled();
@@ -778,6 +784,9 @@ describe('MarketsService archive', () => {
     expect(result.archivedMarkets).toBe(1);
     expect(result.processedMarkets).toBe(1);
     expect(result.skippedMarkets).toBe(0);
+  expect(result.pagination.total).toBe(1);
+  expect(result.candidates).toHaveLength(1);
+  expect(result.candidates[0].id).toBe(resolvedMarket.id);
 
     const statusesQueried = (marketRepo.list as VitestMock).mock.calls.map(([, opts]) => opts?.status);
     expect(statusesQueried).toEqual(['resolved']);

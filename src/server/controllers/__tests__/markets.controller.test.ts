@@ -77,6 +77,12 @@ describe('MarketsController archive route', () => {
       skippedMarkets: 2,
       cutoffIso: '2025-01-02T00:00:00.000Z',
       dryRun: false,
+      candidates: [],
+      pagination: {
+        page: 1,
+        pageSize: 50,
+        total: 3,
+      },
     };
 
     const { dependencies, marketsService } = createDependencies();
@@ -106,6 +112,8 @@ describe('MarketsController archive route', () => {
     expect(options.statuses).toEqual(['resolved', 'void']);
     expect(options.maxMarkets).toBe(100);
     expect(options.dryRun).toBeUndefined();
+    expect(options.page).toBeUndefined();
+    expect(options.pageSize).toBeUndefined();
     expect(options.moderatorId).toBe(defaultContext.userId);
   });
 
@@ -120,6 +128,12 @@ describe('MarketsController archive route', () => {
       skippedMarkets: 12,
       cutoffIso: '2025-02-08T12:00:00.000Z',
       dryRun: true,
+      candidates: [],
+      pagination: {
+        page: 1,
+        pageSize: 50,
+        total: 0,
+      },
     };
 
     const { dependencies, marketsService } = createDependencies();

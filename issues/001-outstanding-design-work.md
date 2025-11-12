@@ -28,9 +28,9 @@ Tracked from the latest review of the design documents (2025-11-11).
 	- Refreshed status messaging around Redis overrides and archive result summaries for moderator clarity.
 
 ## Server & API Design
-- [ ] Surface archive maintenance workflows in the moderator console and expose dry-run reporting endpoints.
-	- [ ] `/internal/markets/archive` enhancements: dry-run summary payload, pagination of affected markets.
-	- [ ] Metrics endpoint publishing archive stats + Redis usage snapshot.
+- [x] Surface archive maintenance workflows in the moderator console and expose dry-run reporting endpoints.
+	- [x] `/internal/markets/archive` enhancements: dry-run summary payload, pagination of affected markets.
+	- [x] Metrics endpoint publishing archive stats + Redis usage snapshot.
 - [ ] Expand audit and metrics coverage around archival operations and advanced moderator tooling.
 	- [ ] Record moderator + auto archive actions in audit log with before/after metadata.
 - [ ] Continue hardening moderator workflow endpoints; close open questions around alternative APIs (GraphQL) and live update strategies (track as post-MVP investigation).

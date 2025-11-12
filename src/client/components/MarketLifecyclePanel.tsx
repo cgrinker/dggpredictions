@@ -15,7 +15,7 @@ import { useAuditLog } from '../hooks/useAuditLog.js';
 import { formatDateTime, formatPoints } from '../utils/format.js';
 import { ManualAdjustmentPanel } from './ManualAdjustmentPanel.js';
 import { CreateMarketPanel } from './CreateMarketPanel.js';
-import type { IncidentFeed, MetricsSummary } from '../api/operations.js';
+import type { IncidentFeed, IncidentSummary, MetricsSummary } from '../../shared/types/dto.js';
 import { getIncidentFeed, getMetricsSummary } from '../api/operations.js';
 import { getConfigState, resetConfigState, updateConfigState } from '../api/config.js';
 
@@ -181,6 +181,8 @@ interface ArchiveFormState {
   readonly olderThanDays: string;
   readonly statuses: Set<'closed' | 'resolved' | 'void'>;
   readonly maxMarkets: string;
+  readonly page: string;
+  readonly pageSize: string;
 }
 
 interface ConfigFormState {
@@ -197,6 +199,8 @@ const createDefaultArchiveForm = (): ArchiveFormState => ({
   olderThanDays: '30',
   statuses: new Set<'closed' | 'resolved' | 'void'>(['closed', 'resolved']),
   maxMarkets: '500',
+  page: '1',
+  pageSize: '25',
 });
 
 const toConfigFormState = (config: AppConfig): ConfigFormState => ({
@@ -425,6 +429,20 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
         return;
       }
 
+      const pageValue = Number.parseInt(archiveForm.page, 10);
+      if (Number.isNaN(pageValue) || pageValue < 1) {
+        setArchiveLoading(false);
+        setArchiveError('Page must be at least 1.');
+        return;
+      }
+
+      const pageSizeValue = Number.parseInt(archiveForm.pageSize, 10);
+      if (Number.isNaN(pageSizeValue) || pageSizeValue < 1 || pageSizeValue > 500) {
+        setArchiveLoading(false);
+        setArchiveError('Page size must be between 1 and 500.');
+        return;
+      }
+
       const requestBody = {
         olderThanDays: Number.parseInt(archiveForm.olderThanDays, 10),
         statuses,
@@ -432,6 +450,8 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
           ? { maxMarkets: Number.parseInt(archiveForm.maxMarkets, 10) }
           : {}),
         dryRun,
+        page: pageValue,
+        pageSize: pageSizeValue,
       };
 
       try {
@@ -494,7 +514,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
   }, []);
 
   const handleArchiveNumberChange = useCallback(
-    (field: 'olderThanDays' | 'maxMarkets') =>
+    (field: 'olderThanDays' | 'maxMarkets' | 'page' | 'pageSize') =>
       (event: ChangeEvent<HTMLInputElement>) => {
         const { value } = event.target;
         setArchiveForm((current) => ({ ...current, [field]: value }));
@@ -1041,8 +1061,10 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
 
   const renderMaintenanceTab = () => {
     const metrics = metricsState.data;
-    const metricsCounters = metrics ? Object.entries(metrics.counters) : [];
-    const incidents = incidentsState.data?.incidents ?? [];
+    const metricsCounters: Array<[string, number]> = metrics
+      ? (Object.entries(metrics.counters) as Array<[string, number]>)
+      : [];
+  const incidents: ReadonlyArray<IncidentSummary> = incidentsState.data?.incidents ?? [];
     const incidentsLoading = incidentsState.loading && incidents.length === 0;
     const metricsLoading = metricsState.loading && metricsCounters.length === 0;
     const maintenanceLoading = metricsState.loading || incidentsState.loading;
@@ -1154,6 +1176,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
                 value={archiveForm.olderThanDays}
                 onChange={handleArchiveNumberChange('olderThanDays')}
                 className="input-control rounded-md px-3 py-2 text-sm"
+                disabled={archiveLoading}
               />
             </label>
 
@@ -1165,6 +1188,32 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
                 value={archiveForm.maxMarkets}
                 onChange={handleArchiveNumberChange('maxMarkets')}
                 className="input-control rounded-md px-3 py-2 text-sm"
+                disabled={archiveLoading}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm theme-heading">
+              Page
+              <input
+                type="number"
+                min={1}
+                value={archiveForm.page}
+                onChange={handleArchiveNumberChange('page')}
+                className="input-control rounded-md px-3 py-2 text-sm"
+                disabled={archiveLoading}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm theme-heading">
+              Results per page
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={archiveForm.pageSize}
+                onChange={handleArchiveNumberChange('pageSize')}
+                className="input-control rounded-md px-3 py-2 text-sm"
+                disabled={archiveLoading}
               />
             </label>
           </div>
@@ -1213,31 +1262,84 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             </button>
           </div>
 
-          {archiveResult && (
-            <div className="rounded border theme-border px-4 py-4 text-sm flex flex-col gap-2">
-              <p className="font-semibold theme-heading">
-                {archiveResult.dryRun ? 'Dry-run results' : 'Archive completed'}
-              </p>
-              <dl className="grid grid-cols-1 gap-y-1 text-sm theme-muted sm:grid-cols-2">
-                <div>
-                  <dt className="text-xs uppercase tracking-wide theme-subtle">Processed</dt>
-                  <dd>{archiveResult.processedMarkets} market(s)</dd>
+          {archiveResult && (() => {
+            const { pagination } = archiveResult;
+            const totalPages = Math.max(1, Math.ceil(pagination.total / pagination.pageSize));
+            const pageRangeStart = pagination.total === 0 ? 0 : (pagination.page - 1) * pagination.pageSize + 1;
+            const pageRangeEnd = pagination.total === 0
+              ? 0
+              : Math.min(pagination.total, pagination.page * pagination.pageSize);
+
+            return (
+              <div className="rounded border theme-border px-4 py-4 text-sm flex flex-col gap-3">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="font-semibold theme-heading">
+                    {archiveResult.dryRun ? 'Dry-run results' : 'Archive completed'}
+                  </p>
+                  <span className="text-xs theme-muted">
+                    Page {pagination.page} of {totalPages} · Showing {pageRangeStart}-{pageRangeEnd} of {pagination.total}
+                  </span>
                 </div>
-                <div>
-                  <dt className="text-xs uppercase tracking-wide theme-subtle">Eligible</dt>
-                  <dd>{archiveResult.archivedMarkets}</dd>
+
+                <dl className="grid grid-cols-1 gap-y-1 text-sm theme-muted sm:grid-cols-2">
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide theme-subtle">Processed</dt>
+                    <dd>{archiveResult.processedMarkets} market(s)</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide theme-subtle">Eligible</dt>
+                    <dd>{archiveResult.archivedMarkets}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide theme-subtle">Skipped</dt>
+                    <dd>{archiveResult.skippedMarkets}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs uppercase tracking-wide theme-subtle">Cutoff</dt>
+                    <dd>{formatDateTime(archiveResult.cutoffIso)}</dd>
+                  </div>
+                </dl>
+
+                <div className="flex flex-col gap-2">
+                  <h4 className="text-sm font-semibold theme-heading">Candidate markets</h4>
+                  {archiveResult.candidates.length === 0 ? (
+                    <p className="text-sm theme-subtle">No candidates on this page. Adjust pagination to inspect other segments.</p>
+                  ) : (
+                    <ul className="flex flex-col gap-3">
+                      {archiveResult.candidates.map((candidate) => (
+                        <li key={candidate.id} className="rounded border theme-border px-4 py-3 flex flex-col gap-2">
+                          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                            <span className="text-sm font-semibold theme-heading">{candidate.title}</span>
+                            <span className="text-xs uppercase tracking-wide theme-subtle">
+                              Status: {candidate.status.toUpperCase()} · Closed {formatDateTime(candidate.closesAt)}
+                            </span>
+                          </div>
+                          <dl className="grid grid-cols-2 gap-y-1 text-xs theme-muted sm:grid-cols-4">
+                            <div>
+                              <dt className="text-xs uppercase tracking-wide theme-subtle">Pot Yes</dt>
+                              <dd>{formatPoints(candidate.potYes)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs uppercase tracking-wide theme-subtle">Pot No</dt>
+                              <dd>{formatPoints(candidate.potNo)}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs uppercase tracking-wide theme-subtle">Total Bets</dt>
+                              <dd>{candidate.totalBets}</dd>
+                            </div>
+                            <div>
+                              <dt className="text-xs uppercase tracking-wide theme-subtle">Implied Yes</dt>
+                              <dd>{candidate.impliedYesPayout}x</dd>
+                            </div>
+                          </dl>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
-                <div>
-                  <dt className="text-xs uppercase tracking-wide theme-subtle">Skipped</dt>
-                  <dd>{archiveResult.skippedMarkets}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs uppercase tracking-wide theme-subtle">Cutoff</dt>
-                  <dd>{formatDateTime(archiveResult.cutoffIso)}</dd>
-                </div>
-              </dl>
-            </div>
-          )}
+              </div>
+            );
+          })()}
         </section>
       </div>
     );

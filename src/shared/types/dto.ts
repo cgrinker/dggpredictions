@@ -99,6 +99,8 @@ export interface ArchiveMarketsRequest {
   readonly statuses?: ReadonlyArray<MarketStatus>;
   readonly maxMarkets?: number;
   readonly dryRun?: boolean;
+  readonly page?: number;
+  readonly pageSize?: number;
 }
 
 export interface ArchiveMarketsResponse {
@@ -107,6 +109,8 @@ export interface ArchiveMarketsResponse {
   readonly skippedMarkets: number;
   readonly cutoffIso: string;
   readonly dryRun: boolean;
+  readonly candidates: readonly MarketSummary[];
+  readonly pagination: Pagination;
 }
 
 export interface ConfigState {
