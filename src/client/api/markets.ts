@@ -12,6 +12,9 @@ import type {
   MarketSettlementMeta,
   ResolveMarketResponseEnvelope,
   CreateMarketRequest,
+  ArchiveMarketsRequest,
+  ArchiveMarketsResponse,
+  ArchiveMarketsResponseEnvelope,
 } from '../../shared/types/dto.js';
 import type { Market } from '../../shared/types/entities.js';
 import { apiFetch, type ApiError } from './client.js';
@@ -139,6 +142,20 @@ export const voidMarket = async (
     {
       method: 'POST',
       body: JSON.stringify({ marketId, reason }),
+    },
+  );
+
+  return envelope.data;
+};
+
+export const archiveMarkets = async (
+  payload: ArchiveMarketsRequest,
+): Promise<ArchiveMarketsResponse> => {
+  const envelope = await apiFetch<ArchiveMarketsResponseEnvelope>(
+    '/api/internal/markets/archive',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
     },
   );
 

@@ -19,15 +19,45 @@ export class ConfigService {
       return cached.config;
     }
 
+    const override = await this.repository.getOverride(subredditId);
+    if (override) {
+      await this.repository.cacheConfig({ subredditId, fetchedAt: nowIso(), config: override });
+      return override;
+    }
+
     const resolved = await this.loadFromSettings();
     await this.repository.cacheConfig({ subredditId, fetchedAt: nowIso(), config: resolved });
     return resolved;
   }
 
   async refreshConfig(subredditId: SubredditId): Promise<AppConfig> {
+    const override = await this.repository.getOverride(subredditId);
+    if (override) {
+      await this.repository.cacheConfig({ subredditId, fetchedAt: nowIso(), config: override });
+      return override;
+    }
+
     const resolved = await this.loadFromSettings();
     await this.repository.cacheConfig({ subredditId, fetchedAt: nowIso(), config: resolved });
     return resolved;
+  }
+
+  async updateConfig(subredditId: SubredditId, config: AppConfig): Promise<AppConfig> {
+    const validated = this.repository.validateConfig(config);
+    await this.repository.saveOverride(subredditId, validated);
+    await this.repository.cacheConfig({ subredditId, fetchedAt: nowIso(), config: validated });
+    return validated;
+  }
+
+  async clearOverride(subredditId: SubredditId): Promise<AppConfig> {
+    await this.repository.clearOverride(subredditId);
+    const resolved = await this.loadFromSettings();
+    await this.repository.cacheConfig({ subredditId, fetchedAt: nowIso(), config: resolved });
+    return resolved;
+  }
+
+  async hasOverride(subredditId: SubredditId): Promise<boolean> {
+    return this.repository.hasOverride(subredditId);
   }
 
   private async loadFromSettings(): Promise<AppConfig> {
@@ -71,11 +101,16 @@ export class ConfigService {
       (flags as Record<string, unknown>).enableLeaderboard ?? raw.enableLeaderboard,
       DEFAULT_APP_CONFIG.featureFlags.enableLeaderboard,
     );
+    const configEditor = this.asBoolean(
+      (flags as Record<string, unknown>).enableConfigEditor ?? raw.enableConfigEditor,
+      DEFAULT_APP_CONFIG.featureFlags.enableConfigEditor,
+    );
 
     return {
       maintenanceMode: maintenance,
       enableRealtimeUpdates: realtime,
       enableLeaderboard: leaderboard,
+      enableConfigEditor: configEditor,
     };
   }
 

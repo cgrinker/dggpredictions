@@ -11,5 +11,6 @@ export const DEFAULT_APP_CONFIG: AppConfig = {
     maintenanceMode: false,
     enableRealtimeUpdates: false,
     enableLeaderboard: true,
+    enableConfigEditor: false,
   },
 };

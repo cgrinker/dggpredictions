@@ -52,6 +52,7 @@ export const leaderboardKeys = {
 
 export const configKeys = {
   cache: (subredditId: SubredditId) => base('config', subredditId, 'cache'),
+  override: (subredditId: SubredditId) => base('config', subredditId, 'override'),
 };
 
 export const userDirectoryKeys = {

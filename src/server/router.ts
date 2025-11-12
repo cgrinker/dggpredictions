@@ -15,6 +15,10 @@ import {
   registerAuditRoutes,
   type AuditControllerDependencies,
 } from './controllers/audit.controller.js';
+import {
+  registerConfigRoutes,
+  type ConfigControllerDependencies,
+} from './controllers/config.controller.js';
 import { asyncHandler } from './utils/async-handler.js';
 import { createPost } from './core/post.js';
 import { context } from '@devvit/web/server';
@@ -23,7 +27,8 @@ import { logger } from './logging.js';
 export type RouterDependencies = MarketControllerDependencies &
   UserControllerDependencies &
   LeaderboardControllerDependencies &
-  AuditControllerDependencies;
+  AuditControllerDependencies &
+  ConfigControllerDependencies;
 
 export const createAppRouter = (dependencies: RouterDependencies): Router => {
   const router = Router();
@@ -32,6 +37,7 @@ export const createAppRouter = (dependencies: RouterDependencies): Router => {
   registerUserRoutes(router, dependencies);
   registerLeaderboardRoutes(router, dependencies);
   registerAuditRoutes(router, dependencies);
+  registerConfigRoutes(router, dependencies);
 
   router.post(
     '/internal/on-app-install',

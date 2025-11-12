@@ -19,7 +19,7 @@ const NAV_ITEMS: ReadonlyArray<{ readonly key: AppRoute; readonly label: string 
 ];
 
 export const App = () => {
-  const { data: session, isLoading: sessionLoading } = useSession();
+  const { data: session, isLoading: sessionLoading, refetch: refreshSession } = useSession();
   const [route, setRoute] = useState<AppRoute>('markets');
   const [selectedMarketId, setSelectedMarketId] = useState<string | null>(null);
   const [marketFilter, setMarketFilter] = useState<MarketsFilter>('open');
@@ -81,7 +81,7 @@ export const App = () => {
     }
 
     if (session && session.isModerator) {
-      return <MarketLifecyclePanel />;
+      return <MarketLifecyclePanel session={session} onSessionRefresh={refreshSession} />;
     }
 
     return (
@@ -101,6 +101,7 @@ export const App = () => {
     handleSelectMarket,
     setMarketFilter,
     session,
+    refreshSession,
   ]);
 
   return (

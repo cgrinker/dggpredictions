@@ -2,6 +2,7 @@ export interface FeatureFlags {
   readonly maintenanceMode: boolean;
   readonly enableRealtimeUpdates: boolean;
   readonly enableLeaderboard: boolean;
+  readonly enableConfigEditor: boolean;
 }
 
 export interface AppConfig {

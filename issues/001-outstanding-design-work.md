@@ -10,13 +10,15 @@ Tracked from the latest review of the design documents (2025-11-11).
 	- [ ] Draft allow-list request + backup strategy (CSV download fallback) for compliance review.
 
 ## Client UX Design
-- [ ] Add moderator-facing archival controls and configuration editing panels into the console.
-	- [ ] Maintenance tab with archive dry-run + execute actions.
-	- [ ] Read/write config editor gated by feature flag.
-- [ ] Flesh out observability affordances on the client (metrics/incident surfacing).
-	- [ ] Metrics widget fed from `/internal/metrics/summary`.
-	- [ ] Incident banner component pulling from new incident endpoint.
+- [x] Add moderator-facing archival controls and configuration editing panels into the console.
+	- [x] Maintenance tab with archive dry-run + execute actions.
+	- [x] Read/write config editor gated by feature flag.
+- [x] Flesh out observability affordances on the client (metrics/incident surfacing).
+	- [x] Metrics widget fed from `/internal/metrics/summary`.
+	- [x] Incident banner component pulling from new incident endpoint.
 - [ ] Plan and scope longer-term UX enhancements (post-MVP): realtime odds updates, resolution notifications, localization, dark-mode parity.
+- [ ] QA maintenance/config tabs against live endpoints (dry-run + save/reset) once server routes stabilize.
+- [ ] Polish maintenance/config copy + spacing after backend validation feedback.
 
 ## Server & API Design
 - [ ] Surface archive maintenance workflows in the moderator console and expose dry-run reporting endpoints.

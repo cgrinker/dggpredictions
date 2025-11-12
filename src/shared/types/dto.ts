@@ -8,6 +8,7 @@ import type {
   Points,
   UserBalance,
 } from './entities.js';
+import type { AppConfig } from './config.js';
 import type { ModeratorActionBase } from './moderation.js';
 
 export interface Pagination {
@@ -45,6 +46,7 @@ export interface SessionInfo {
   readonly userId: string | null;
   readonly username: string | null;
   readonly isModerator: boolean;
+  readonly config: AppConfig | null;
 }
 
 export interface PlaceBetRequest {
@@ -87,6 +89,11 @@ export interface ArchiveMarketsResponse {
   readonly skippedMarkets: number;
   readonly cutoffIso: string;
   readonly dryRun: boolean;
+}
+
+export interface ConfigState {
+  readonly config: AppConfig;
+  readonly overridesApplied: boolean;
 }
 
 export interface ResolveMarketRequest extends MarketStateChangeRequest {
@@ -159,6 +166,7 @@ export type WalletResponse = ApiSuccessEnvelope<WalletSnapshot>;
 export type UserBetsResponse = ApiSuccessEnvelope<PaginatedResponse<BetSummary>>;
 export type LeaderboardResponseEnvelope = ApiSuccessEnvelope<LeaderboardResponse>;
 export type ArchiveMarketsResponseEnvelope = ApiSuccessEnvelope<ArchiveMarketsResponse>;
+export type ConfigResponseEnvelope = ApiSuccessEnvelope<ConfigState>;
 export type ResolveMarketResponseEnvelope = ApiSuccessEnvelope<Market> & {
   readonly meta?: {
     readonly settlement?: MarketSettlementMeta;

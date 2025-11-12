@@ -6,6 +6,7 @@ export const FeatureFlagsSchema = z
     maintenanceMode: z.boolean().default(false),
     enableRealtimeUpdates: z.boolean().default(false),
     enableLeaderboard: z.boolean().default(true),
+    enableConfigEditor: z.boolean().default(false),
   })
   .strict();
 

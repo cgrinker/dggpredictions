@@ -14,6 +14,7 @@ import {
   UserIdSchema,
   UserBalanceSchema,
 } from './entities.schema.js';
+import { AppConfigSchema } from './config.schema.js';
 import { ModeratorActionSchema } from './moderation.schema.js';
 
 export const PaginationSchema = z
@@ -170,6 +171,13 @@ export const AuditLogResponseSchema = z
   .object({
     actions: z.array(ModeratorActionSchema).readonly(),
     fetchedAt: ISODateStringSchema,
+  })
+  .strict();
+
+export const ConfigResponseSchema = z
+  .object({
+    config: AppConfigSchema,
+    overridesApplied: z.boolean(),
   })
   .strict();
 

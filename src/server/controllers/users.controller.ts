@@ -39,6 +39,7 @@ export const registerUserRoutes = (
           userId: context.userId ?? null,
           username: context.username ?? null,
           isModerator: context.isModerator,
+          config: context.config ?? null,
         },
       });
     }),

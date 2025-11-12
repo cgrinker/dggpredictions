@@ -74,6 +74,7 @@ const router = createAppRouter({
   leaderboardService,
   auditLogService,
   balanceAdjustmentService,
+  configService,
 });
 app.use(router);
 
