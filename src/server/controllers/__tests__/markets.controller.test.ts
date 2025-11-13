@@ -48,6 +48,7 @@ const createDependencies = () => {
     createDraft: vi.fn(),
     archiveMarkets: vi.fn(),
     pruneArchivedMarkets: vi.fn(),
+    getBetHistory: vi.fn(),
   };
 
   const betsService: Partial<BetsService> = {};
@@ -64,6 +65,77 @@ const createDependencies = () => {
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+});
+
+describe('MarketsController history route', () => {
+  it('returns bet history for a market', async () => {
+    const historyResult = {
+      marketId: 'market-123',
+      intervals: [
+        {
+          interval: 'hour' as const,
+          points: [],
+        },
+        {
+          interval: 'day' as const,
+          points: [],
+        },
+        {
+          interval: 'week' as const,
+          points: [],
+        },
+        {
+          interval: 'month' as const,
+          points: [],
+        },
+      ],
+    };
+
+    const { dependencies, marketsService } = createDependencies();
+    (marketsService.getBetHistory as VitestMock).mockResolvedValue(historyResult);
+
+    const app = createApp(dependencies, {});
+    const agent: SuperTest<SupertestRequest> = supertest(app);
+
+    const response = await agent.get('/api/markets/market-123/history').expect(200);
+
+    expect(response.body.data).toEqual(historyResult);
+    expect(marketsService.getBetHistory).toHaveBeenCalledWith(
+      defaultContext.subredditId,
+      'market-123',
+      undefined,
+    );
+  });
+
+  it('passes interval query string through to service', async () => {
+    const historyResult = {
+      marketId: 'market-123',
+      intervals: [
+        {
+          interval: 'hour' as const,
+          points: [],
+        },
+      ],
+    };
+
+    const { dependencies, marketsService } = createDependencies();
+    (marketsService.getBetHistory as VitestMock).mockResolvedValue(historyResult);
+
+    const app = createApp(dependencies, {});
+    const agent: SuperTest<SupertestRequest> = supertest(app);
+
+    const response = await agent
+      .get('/api/markets/market-123/history')
+      .query({ interval: 'hour' })
+      .expect(200);
+
+    expect(response.body.data).toEqual(historyResult);
+    expect(marketsService.getBetHistory).toHaveBeenCalledWith(
+      defaultContext.subredditId,
+      'market-123',
+      'hour',
+    );
+  });
 });
 
 describe('MarketsController archive route', () => {
@@ -256,6 +328,7 @@ describe('MarketsController create route', () => {
       potYes: 0,
       potNo: 0,
       totalBets: 0,
+      imageUrl: 'https://example.com/market.png',
     };
 
     const { dependencies, marketsService } = createDependencies();
@@ -268,6 +341,7 @@ describe('MarketsController create route', () => {
       title: 'Test Market',
       description: 'Description',
       closesAt: createdMarket.closesAt,
+      imageUrl: createdMarket.imageUrl,
       tags: ['tag1', 'tag2'],
     };
 
@@ -284,6 +358,7 @@ describe('MarketsController create route', () => {
       title: payload.title,
       description: payload.description,
       closesAt: payload.closesAt,
+      imageUrl: payload.imageUrl,
       tags: payload.tags,
     });
     expect(options).toEqual({ creatorUsername: defaultContext.username });

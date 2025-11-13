@@ -12,6 +12,7 @@ interface FormState {
   readonly title: string;
   readonly description: string;
   readonly closesAt: string;
+  readonly imageUrl: string;
   readonly tags: string;
 }
 
@@ -37,6 +38,7 @@ const createInitialFormState = (): FormState => {
     title: '',
     description: '',
     closesAt: formatDateTimeInput(closesAt),
+    imageUrl: '',
     tags: '',
   } satisfies FormState;
 };
@@ -98,10 +100,25 @@ export const CreateMarketPanel = ({ onCreated }: CreateMarketPanelProps) => {
         return;
       }
 
+      let imageUrl: string | undefined;
+      if (form.imageUrl.trim().length > 0) {
+        try {
+          const parsed = new URL(form.imageUrl.trim());
+          imageUrl = parsed.toString();
+        } catch (error) {
+          setFeedback({
+            type: 'error',
+            message: 'Provide a valid image URL (include https://).',
+          });
+          return;
+        }
+      }
+
       const payload: CreateMarketRequest = {
         title: trimmedTitle,
         description: trimmedDescription,
         closesAt: closesAtIso,
+        ...(imageUrl ? { imageUrl } : {}),
         ...(tagsPreview.length > 0 ? { tags: tagsPreview } : {}),
       };
 
@@ -188,6 +205,19 @@ export const CreateMarketPanel = ({ onCreated }: CreateMarketPanelProps) => {
             />
             <span className="text-xs theme-muted">
               Closing time is interpreted in your local timezone and stored as UTC.
+            </span>
+          </label>
+          <label className="flex flex-col gap-1 text-sm theme-heading">
+            Image URL (optional)
+            <input
+              type="url"
+              value={form.imageUrl}
+              onChange={(event) => handleChange('imageUrl', event.target.value)}
+              className="input-control rounded-md px-3 py-2 text-sm"
+              placeholder="https://example.com/market-image.png"
+            />
+            <span className="text-xs theme-muted">
+              Leave blank to use the default icon in market listings.
             </span>
           </label>
           <label className="flex flex-col gap-1 text-sm theme-heading">

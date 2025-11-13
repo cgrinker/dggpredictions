@@ -10,7 +10,8 @@ export type ModeratorActionType =
   | 'ADJUST_BALANCE'
   | 'CONFIG_UPDATE'
   | 'ARCHIVE_MARKETS'
-  | 'PRUNE_MARKETS';
+  | 'PRUNE_MARKETS'
+  | 'RESET_SYSTEM';
 
 export interface ModeratorActionSnapshot<TBefore = unknown, TAfter = unknown> {
   readonly before: TBefore | null;

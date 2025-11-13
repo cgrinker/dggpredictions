@@ -88,3 +88,9 @@ src/shared/
 - Validation helpers integrated into server middleware.
 - Client API hooks using DTO types for strong typing.
 - Documentation for schema versioning and update process.
+
+## Implementation Progress (Nov 12, 2025)
+- ✅ DTO and schema layers now cover market bet history responses consumed by `useMarketHistory`, keeping client/server parity.
+- ✅ Create market schema accepts optional moderator-provided image URLs without relying on file extensions, aligning validation with Devvit media uploads.
+- ✅ Moderator action schemas capture expanded payload metadata for lifecycle events and operations reset audit entries.
+- 🔄 Schema changelog automation and generated documentation remain outstanding future work.

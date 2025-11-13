@@ -11,9 +11,9 @@ export const createPost = async () => {
       // Splash Screen Configuration
       appDisplayName: 'dggpredictions',
       backgroundUri: 'default-splash.png',
-      buttonLabel: 'Tap to Start',
-      description: 'An exciting interactive experience',
-      heading: 'Welcome to the Game!',
+      buttonLabel: 'Play',
+      description: 'Got a Hot Take?',
+      heading: 'DGG Prediction Market',
       appIconUri: 'default-icon.png',
     },
     postData: {

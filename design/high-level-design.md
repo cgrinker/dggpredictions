@@ -169,5 +169,8 @@ _Note: These are internal Devvit Web routes mounted under `/api/*` (or `/interna
 - ✅ Moderator lifecycle console now includes draft creation, publish/close/resolve/void controls, recent audit log visibility, and the manual balance adjustment workflow.
 - ✅ Moderator balance adjustments are processed through a dedicated service that records ledger entries, snapshots the before/after state, and exposes the workflow in the console.
 - ✅ End-to-end betting loop validated: moderators can draft/publish markets, participants wager, and settlements distribute winnings and losses proportionally.
+- ✅ Operations reset workflow deterministically erases Redis keys via targeted discovery and is guarded by regression tests.
+- ✅ Moderator lifecycle UI now ships searchable/sortable market tables, tag badges, collapsible audit payloads, and inline participant bet summaries.
+- ✅ Market imagery accepts optional extensionless URLs, proxies through Devvit media uploads, and renders across list/detail screens with refreshed default assets.
 - 🔄 Observability and admin tooling (metrics counters, scheduler dashboards, archival UI) remain outstanding for a future iteration.
 - 🔄 Nightly export/reporting pipelines are still planned pending platform approvals.

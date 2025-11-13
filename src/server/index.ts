@@ -20,6 +20,7 @@ import { AuditLogService } from './services/audit-log.service.js';
 import { BalanceAdjustmentService } from './services/balance-adjustment.service.js';
 import { UserDirectoryService } from './services/user-directory.service.js';
 import { OperationsService } from './services/operations.service.js';
+import { redisClient } from './redis-client.js';
 
 const configService = new ConfigService();
 const marketRepository = new MarketRepository();
@@ -37,7 +38,7 @@ const balanceAdjustmentService = new BalanceAdjustmentService(
   ledgerService,
   auditLogService,
 );
-const operationsService = new OperationsService(marketRepository);
+const operationsService = new OperationsService(marketRepository, null, redisClient, auditLogService);
 
 const marketsService = new MarketsService(
   marketRepository,

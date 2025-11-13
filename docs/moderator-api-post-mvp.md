@@ -7,8 +7,9 @@ _Last updated: 2025-11-12_
 - Archival workflows log detailed audit entries (`ARCHIVE_MARKETS`) including before/after snapshots and system fallbacks.
 - Metrics and incident reporting endpoints back the moderator console widgets.
 - Scheduler prune job available via `/internal/scheduler/market-prune`, removing aged archived markets and logging `PRUNE_MARKETS` actions.
-- Moderator console adds purge confirmation modal, targeted audit filters (retention, config, resolutions), and logs `CONFIG_UPDATE` actions.
-- Regression harness exposed via `npm run playtest:regression` to exercise moderator endpoints pre-deploy.
+- Moderator console adds purge confirmation modal, targeted audit filters (retention, config, resolutions), logs `CONFIG_UPDATE` actions, and now supports searchable/sortable market tables with tag badges and collapsible audit payloads.
+- Market detail tooling fetches interval-aware bet history via `/api/markets/:id/history` while surfacing a moderator's current bet context inline.
+- Regression harness exposed via `npm run playtest:regression` to exercise moderator endpoints pre-deploy, supplemented by deterministic Redis reset tooling in `OperationsService`.
 
 ## Hardening Checklist
 - [x] Enforce request validation for all moderator write endpoints (publish, close, resolve, void, archive).
@@ -30,6 +31,6 @@ _Last updated: 2025-11-12_
 - **Decision**: Prototype SSE channel post-MVP for market lifecycle notifications; keep WebSockets in backlog pending scale tests.
 
 ## Next Steps
-1. Ship moderator auth middleware updates to surface usernames consistently (in progress).
-2. Draft staging checklist covering the remaining hardening bullets above.
+1. Ship moderator auth middleware updates to surface usernames consistently (in progress; lifecycle events now pass optional usernames but middleware hardening remains outstanding).
+2. Draft staging checklist covering the remaining hardening bullets above, including new market history endpoints and reset tooling.
 3. Re-evaluate GraphQL/SSE during the operations stabilization milestone (target: Q1 2026).

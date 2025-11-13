@@ -30,6 +30,7 @@ export interface Market {
   readonly potYes: Points;
   readonly potNo: Points;
   readonly totalBets: number;
+  readonly imageUrl: string | null;
   readonly metadata?: Record<string, unknown>;
 }
 

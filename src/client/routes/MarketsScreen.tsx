@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useMarkets } from '../hooks/useMarkets.js';
-import { formatDateTime, formatPoints, formatRelativeTime } from '../utils/format.js';
+import { formatDateTime, formatPoints, formatProbability, formatRelativeTime } from '../utils/format.js';
+import defaultIcon from '../../../assets/default-icon.png';
 import type { MarketSummary } from '../../shared/types/dto.js';
 
 export type MarketsFilter = 'open' | 'closed' | 'resolved';
@@ -53,43 +54,56 @@ const MarketCard = ({
   readonly filter: MarketsFilter;
   readonly onSelect: (marketId: string) => void;
 }) => {
+  const imageSrc = market.imageUrl ?? defaultIcon;
   return (
     <li className="rounded-2xl theme-card p-5">
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h3 className="text-lg font-semibold theme-heading">{market.title}</h3>
-            {renderMetadata(market, filter)}
-          </div>
-          <span className="inline-flex items-center gap-2 self-start badge-soft px-3 py-1 text-xs font-semibold">
-            {filter.toUpperCase()}
-          </span>
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-5">
+        <div
+          className="flex-shrink-0 overflow-hidden rounded-xl bg-[color:var(--surface-muted)] self-center sm:self-auto w-[160px] h-[160px] sm:w-[120px] sm:h-[120px]"
+        >
+          <img
+            src={imageSrc}
+            alt={market.title}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
         </div>
-        <dl className="grid grid-cols-2 gap-y-2 text-sm theme-muted sm:grid-cols-4">
-          <div>
-            <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
-            <dd>{formatPoints(market.potYes)}</dd>
+        <div className="flex flex-1 flex-col gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold theme-heading">{market.title}</h3>
+              {renderMetadata(market, filter)}
+            </div>
+            <span className="inline-flex items-center gap-2 self-start badge-soft px-3 py-1 text-xs font-semibold">
+              {filter.toUpperCase()}
+            </span>
           </div>
-          <div>
-            <dt className="font-medium theme-heading text-xs">Pot No</dt>
-            <dd>{formatPoints(market.potNo)}</dd>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm theme-muted sm:grid-cols-4">
+            <div>
+              <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
+              <dd>{formatPoints(market.potYes)}</dd>
+            </div>
+            <div>
+              <dt className="font-medium theme-heading text-xs">Pot No</dt>
+              <dd>{formatPoints(market.potNo)}</dd>
+            </div>
+            <div>
+              <dt className="font-medium theme-heading text-xs">Implied Yes</dt>
+              <dd>{formatProbability(market.impliedYesProbability)}</dd>
+            </div>
+            <div>
+              <dt className="font-medium theme-heading text-xs">Implied No</dt>
+              <dd>{formatProbability(market.impliedNoProbability)}</dd>
+            </div>
+          </dl>
+          <div className="flex">
+            <button
+              className="inline-flex items-center justify-center btn-base btn-primary px-4 py-2 text-sm"
+              onClick={() => onSelect(market.id)}
+            >
+              View Market
+            </button>
           </div>
-          <div>
-            <dt className="font-medium theme-heading text-xs">Implied Yes</dt>
-            <dd>{market.impliedYesPayout.toFixed(2)}x</dd>
-          </div>
-          <div>
-            <dt className="font-medium theme-heading text-xs">Implied No</dt>
-            <dd>{market.impliedNoPayout.toFixed(2)}x</dd>
-          </div>
-        </dl>
-        <div className="flex">
-          <button
-            className="inline-flex items-center justify-center btn-base btn-primary px-4 py-2 text-sm"
-            onClick={() => onSelect(market.id)}
-          >
-            View Market
-          </button>
         </div>
       </div>
     </li>

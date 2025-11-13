@@ -24,10 +24,30 @@ export interface PaginatedResponse<T> {
 }
 
 export interface MarketSummary
-  extends Pick<Market, 'id' | 'title' | 'status' | 'closesAt' | 'potYes' | 'potNo' | 'totalBets'> {
-  readonly impliedYesPayout: number;
-  readonly impliedNoPayout: number;
+  extends Pick<Market, 'id' | 'title' | 'status' | 'closesAt' | 'potYes' | 'potNo' | 'totalBets' | 'imageUrl'> {
+  readonly impliedYesProbability: number;
+  readonly impliedNoProbability: number;
   readonly metadata?: Market['metadata'];
+}
+
+export type BetHistoryInterval = 'hour' | 'day' | 'week' | 'month';
+
+export interface BetHistoryPoint {
+  readonly start: ISODateString;
+  readonly end: ISODateString;
+  readonly cumulativePotYes: Points;
+  readonly cumulativePotNo: Points;
+  readonly cumulativeBets: number;
+}
+
+export interface MarketBetHistorySeries {
+  readonly interval: BetHistoryInterval;
+  readonly points: readonly BetHistoryPoint[];
+}
+
+export interface MarketBetHistoryResponse {
+  readonly marketId: MarketId;
+  readonly intervals: readonly MarketBetHistorySeries[];
 }
 
 export interface MarketDetail extends Market {
@@ -67,6 +87,12 @@ export interface IncidentFeed {
   readonly fetchedAt: ISODateString;
 }
 
+export interface SystemResetResponse {
+  readonly attemptedKeys: number;
+  readonly deletedKeys: number;
+  readonly errors: number;
+}
+
 export interface PlaceBetRequest {
   readonly marketId: MarketId;
   readonly side: BetSide;
@@ -83,6 +109,7 @@ export interface CreateMarketRequest {
   readonly title: string;
   readonly description: string;
   readonly closesAt: string;
+  readonly imageUrl?: string;
   readonly tags?: readonly string[];
 }
 
@@ -184,6 +211,7 @@ export interface ApiErrorEnvelope {
 export type PlaceBetResponseEnvelope = ApiSuccessEnvelope<PlaceBetResponse>;
 export type MarketListResponse = ApiSuccessEnvelope<PaginatedResponse<MarketSummary>>;
 export type MarketDetailResponse = ApiSuccessEnvelope<MarketDetail>;
+export type MarketBetHistoryResponseEnvelope = ApiSuccessEnvelope<MarketBetHistoryResponse>;
 export type WalletResponse = ApiSuccessEnvelope<WalletSnapshot>;
 export type UserBetsResponse = ApiSuccessEnvelope<PaginatedResponse<BetSummary>>;
 export type LeaderboardResponseEnvelope = ApiSuccessEnvelope<LeaderboardResponse>;
@@ -197,3 +225,4 @@ export type ResolveMarketResponseEnvelope = ApiSuccessEnvelope<Market> & {
 export type AuditLogResponseEnvelope = ApiSuccessEnvelope<AuditLogResponse>;
 export type AdjustBalanceResponseEnvelope = ApiSuccessEnvelope<AdjustBalanceResponse>;
 export type SessionResponseEnvelope = ApiSuccessEnvelope<SessionInfo>;
+export type SystemResetResponseEnvelope = ApiSuccessEnvelope<SystemResetResponse>;

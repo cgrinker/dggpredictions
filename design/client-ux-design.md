@@ -49,6 +49,7 @@ src/client/
 │   ├─ useBets.ts
 │   ├─ useWallet.ts
 │   ├─ useLeaderboard.ts
+│   ├─ useMarketHistory.ts
 │   └─ useAdminActions.ts
 ├─ api/
 │   ├─ client.ts (fetch wrapper with base options, error mapping)
@@ -82,9 +83,10 @@ src/client/
   2. Odds panel (Yes vs No) with dynamic payout multipliers.
   3. User bet state:
      - If no bet: display `BetSlip` with side selector, wager input, computed potential payout. Wager input defaults to min bet, with quick multiplier buttons (x0.5 pot, x2 min, etc.). Client-side validation ensures numeric and within balance/limits.
-     - If existing bet: show summary (side, wager, potential payout), allow editing only if config allows (initial version likely locks after placement).
-  4. Activity feed (optional): show recent bets with anonymized amounts (future phase).
-  5. Moderator actions (if mod): buttons `Edit`, `Close`, `Resolve`, `Void`, launching forms/dialogs.
+    - If existing bet: show inline summary (side, wager, potential payout) above the form, allow editing only if config allows (initial version likely locks after placement).
+  4. Bet history toggle: fetch interval-aware market history via `useMarketHistory` and render chart/metrics for Yes vs No volume over time.
+  5. Activity feed (optional): show recent bets with anonymized amounts (future phase).
+  6. Moderator actions (if mod): buttons `Edit`, `Close`, `Resolve`, `Void`, launching forms/dialogs.
 - Provide CTA for returning to lobby/back.
 
 ### Wallet (`/wallet`)
@@ -107,10 +109,11 @@ src/client/
 ### Admin Console (`/admin`)
 - Protected: if `!isModerator`, redirect to lobby with toast.
 - Sections:
-  1. `Open Markets` table with quick actions (close, resolve).
-  2. `Drafts` list with resume editing option.
+  1. `Open Markets` table with quick actions (close, resolve), searchable and sortable headers, and tag badges.
+  2. `Drafts` list with resume editing option, respecting search filters.
   3. `Create Market` form:
      - Title, description (rich text limited), close time (datetime picker), optional tags.
+     - Optional image URL field with inline validation feedback and thumbnail preview.
      - Form uses Devvit Forms or custom modal. On submit, call POST `/internal/markets`.
   4. `Resolution Queue`: closed markets awaiting resolution with aggregated metrics.
   5. `Config` panel (read-only in phase 1) showing current settings; future milestone might allow editing.
@@ -181,6 +184,8 @@ src/client/
 
 - ✅ Participant experiences (Markets lobby, Market detail with bet slip, Wallet, Bets, Leaderboard) are implemented and wired to live hooks/APIs with optimistic updates where appropriate.
 - ✅ Moderator lifecycle console (`MarketLifecyclePanel`) now includes draft creation, publish/close/resolve/void controls, an integrated audit log viewer, and the manual balance adjustment form with dual-confirmation safeguards.
+- ✅ Market lifecycle views surface search/sort controls, tag badges, collapsible audit payloads, and inline market imagery.
 - ✅ Client API and hook layers cover markets, bets, wallet, leaderboard, audit log flows, moderator balance adjustments, and draft creation with consistent error handling utilities.
+- ✅ `useMarketHistory` fetches interval-aware bet history to unlock charting and trend analysis on market detail screens.
 - ✅ Manual playtest validated: moderator creates/publishes markets, participants place opposing bets, and settlements pay winners while debiting losers.
 - 🔄 Moderator-only extensions (archival tooling, config editing) and richer observability affordances are scheduled for upcoming work.

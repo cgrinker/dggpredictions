@@ -10,7 +10,15 @@ import type {
   UserBalance,
   UserId,
 } from '../../shared/types/entities.js';
-import type { MarketDetail, MarketSummary, PaginatedResponse } from '../../shared/types/dto.js';
+import type {
+  BetHistoryInterval,
+  BetHistoryPoint,
+  MarketBetHistoryResponse,
+  MarketDetail,
+  MarketSummary,
+  PaginatedResponse,
+  CreateMarketRequest,
+} from '../../shared/types/dto.js';
 import type { ModeratorActionType } from '../../shared/types/moderation.js';
 import { MarketRepository } from '../repositories/market.repository.js';
 import { BetRepository } from '../repositories/bet.repository.js';
@@ -21,8 +29,8 @@ import { SchedulerService } from './scheduler.service.js';
 import { AuditLogService } from './audit-log.service.js';
 import { createMarketId } from '../utils/id.js';
 import { nowIso } from '../utils/time.js';
-import type { CreateMarketRequest } from '../../shared/types/dto.js';
 import { NotFoundError, ValidationError } from '../errors.js';
+import { media } from '@devvit/media';
 import type { TxClientLike, RedisClient } from '@devvit/redis';
 import { balanceKeys, betKeys, marketKeys, userKeys } from '../utils/redis-keys.js';
 import { runTransactionWithRetry } from '../utils/transactions.js';
@@ -30,6 +38,7 @@ import { deserializeBet, deserializeMarket, deserializeUserBalance } from '../ut
 
 const SYSTEM_ARCHIVE_ACTOR_ID = 'system:auto-archive' as UserId;
 const SYSTEM_ARCHIVE_ACTOR_USERNAME = 'auto-archive';
+const BET_HISTORY_INTERVALS: readonly BetHistoryInterval[] = ['hour', 'day', 'week', 'month'];
 
 interface MarketSettlementResult {
   readonly market: Market;
@@ -208,6 +217,31 @@ export class MarketsService {
     return { ...market, userBet } satisfies MarketDetail;
   }
 
+  async getBetHistory(
+    subredditId: SubredditId,
+    marketId: MarketId,
+    interval?: BetHistoryInterval,
+  ): Promise<MarketBetHistoryResponse> {
+    const market = await this.markets.getById(subredditId, marketId);
+    if (!market) {
+      throw new NotFoundError(`Market ${marketId} not found.`);
+    }
+
+    const bets = await this.bets.listByMarket(subredditId, marketId);
+    const sortedBets = [...bets].sort(
+      (a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt),
+    );
+    const intervals = interval ? [interval] : BET_HISTORY_INTERVALS;
+
+    return {
+      marketId: market.id,
+      intervals: intervals.map((interval) => ({
+        interval,
+        points: this.buildBetHistorySeries(sortedBets, interval),
+      })),
+    } satisfies MarketBetHistoryResponse;
+  }
+
   async createDraft(
     subredditId: SubredditId,
     creatorId: UserId,
@@ -224,7 +258,9 @@ export class MarketsService {
       }
     }
 
-    const metadata = payload.tags && payload.tags.length > 0 ? { tags: payload.tags } : undefined;
+  const metadata = payload.tags && payload.tags.length > 0 ? { tags: payload.tags } : undefined;
+  const trimmedImageUrl = payload.imageUrl?.trim() ?? '';
+  const imageUrl = trimmedImageUrl.length > 0 ? await this.uploadMarketImage(trimmedImageUrl) : null;
     const base: Omit<Market, 'metadata'> & { metadata?: Record<string, unknown> } = {
       schemaVersion: 1,
       id: createMarketId(),
@@ -240,6 +276,7 @@ export class MarketsService {
       potYes: 0,
       potNo: 0,
       totalBets: 0,
+      imageUrl,
     };
 
     if (metadata) {
@@ -258,6 +295,7 @@ export class MarketsService {
       payload: {
         title: payload.title,
         closesAt: payload.closesAt,
+        ...(imageUrl ? { imageUrl } : {}),
         tags: payload.tags ?? [],
       },
     });
@@ -727,6 +765,40 @@ export class MarketsService {
     } satisfies PruneMarketsResult;
   }
 
+  private async uploadMarketImage(sourceUrl: string): Promise<string> {
+    try {
+      const asset = await media.upload({
+        url: sourceUrl,
+        type: this.resolveMediaTypeFromUrl(sourceUrl),
+      });
+
+      if (!asset || typeof asset.mediaUrl !== 'string' || asset.mediaUrl.trim().length === 0) {
+        throw new Error('Media upload response missing mediaUrl.');
+      }
+
+      return asset.mediaUrl;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error';
+      throw new ValidationError(`Failed to upload market image: ${message}`);
+    }
+  }
+
+  private resolveMediaTypeFromUrl(rawUrl: string): 'gif' | 'image' {
+    const extension = this.extractFileExtension(rawUrl);
+    return extension === 'gif' ? 'gif' : 'image';
+  }
+
+  private extractFileExtension(rawUrl: string): string {
+    try {
+      const { pathname } = new URL(rawUrl);
+  const match = pathname.match(/\.([a-z0-9]+)$/i);
+  const extension = match?.[1] ?? '';
+  return extension.toLowerCase();
+    } catch {
+      return '';
+    }
+  }
+
   private ensureCloseTimeIsValid(raw: string) {
     const closesAt = Date.parse(raw);
     if (Number.isNaN(closesAt)) {
@@ -818,9 +890,105 @@ export class MarketsService {
     return this.bets.getById(subredditId, pointer);
   }
 
+  private buildBetHistorySeries(
+    bets: readonly Bet[],
+    interval: BetHistoryInterval,
+  ): BetHistoryPoint[] {
+    if (bets.length === 0) {
+      return [];
+    }
+
+    let cumulativePotYes = 0;
+    let cumulativePotNo = 0;
+    let cumulativeBets = 0;
+
+    const buckets = new Map<string, BetHistoryPoint>();
+
+    for (const bet of bets) {
+      const timestamp = Date.parse(bet.createdAt);
+      if (Number.isNaN(timestamp)) {
+        continue;
+      }
+
+      const bucketStart = this.getBucketStart(new Date(timestamp), interval);
+      const bucketKey = bucketStart.toISOString();
+      const bucketEnd = this.getBucketEnd(bucketStart, interval);
+
+      cumulativeBets += 1;
+      if (bet.side === 'yes') {
+        cumulativePotYes += bet.wager;
+      } else {
+        cumulativePotNo += bet.wager;
+      }
+
+      buckets.set(bucketKey, {
+        start: bucketKey,
+        end: bucketEnd.toISOString(),
+        cumulativePotYes,
+        cumulativePotNo,
+        cumulativeBets,
+      });
+    }
+
+    return Array.from(buckets.values()).sort(
+      (a, b) => Date.parse(a.start) - Date.parse(b.start),
+    );
+  }
+
+  private getBucketStart(date: Date, interval: BetHistoryInterval): Date {
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth();
+    const day = date.getUTCDate();
+    const hour = date.getUTCHours();
+
+    switch (interval) {
+      case 'hour':
+        return new Date(Date.UTC(year, month, day, hour));
+      case 'day':
+        return new Date(Date.UTC(year, month, day));
+      case 'week': {
+        const dayOfWeek = date.getUTCDay();
+        const daysSinceMonday = (dayOfWeek + 6) % 7;
+        return new Date(Date.UTC(year, month, day - daysSinceMonday));
+      }
+      case 'month':
+      default:
+        return new Date(Date.UTC(year, month, 1));
+    }
+  }
+
+  private getBucketEnd(start: Date, interval: BetHistoryInterval): Date {
+    switch (interval) {
+      case 'hour':
+        return new Date(
+          Date.UTC(
+            start.getUTCFullYear(),
+            start.getUTCMonth(),
+            start.getUTCDate(),
+            start.getUTCHours() + 1,
+          ),
+        );
+      case 'day':
+        return new Date(Date.UTC(
+          start.getUTCFullYear(),
+          start.getUTCMonth(),
+          start.getUTCDate() + 1,
+        ));
+      case 'week':
+        return new Date(Date.UTC(
+          start.getUTCFullYear(),
+          start.getUTCMonth(),
+          start.getUTCDate() + 7,
+        ));
+      case 'month':
+      default:
+        return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+    }
+  }
+
   private toMarketSummary(market: Market): MarketSummary {
-    const impliedYesPayout = this.calculateImpliedPayout(market.potYes, market.potNo);
-    const impliedNoPayout = this.calculateImpliedPayout(market.potNo, market.potYes);
+    const impliedYesProbability = this.calculateProbability(market.potYes, market.potNo);
+    const impliedNoProbability = this.calculateProbability(market.potNo, market.potYes);
 
     return {
       id: market.id,
@@ -830,21 +998,21 @@ export class MarketsService {
       potYes: market.potYes,
       potNo: market.potNo,
       totalBets: market.totalBets,
-      impliedYesPayout,
-      impliedNoPayout,
+      imageUrl: market.imageUrl,
+      impliedYesProbability,
+      impliedNoProbability,
       ...(market.metadata ? { metadata: market.metadata } : {}),
     } satisfies MarketSummary;
   }
 
-  private calculateImpliedPayout(potFor: number, potAgainst: number): number {
-    const sanitizedFor = potFor > 0 ? potFor : 1;
+  private calculateProbability(potFor: number, potAgainst: number): number {
     const totalPool = potFor + potAgainst;
-    if (totalPool === 0) {
-      return 1;
+    if (totalPool <= 0) {
+      return 0;
     }
 
-    const odds = potAgainst / sanitizedFor;
-    return Number.parseFloat((1 + odds).toFixed(2));
+    const ratio = potFor / totalPool;
+    return Number.parseFloat(ratio.toFixed(4));
   }
 
   private async recordMarketAction(

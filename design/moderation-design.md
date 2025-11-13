@@ -14,7 +14,7 @@
 ## Privileged Actions & UI Placement
 | Action | UI Entry Point | Server Endpoint | Notes |
 |--------|----------------|-----------------|-------|
-| Create draft market | Admin Console → "Create Market" form | `POST /internal/markets` | Requires title, description, close time; optional tags. |
+| Create draft market | Admin Console → "Create Market" form | `POST /internal/markets` | Requires title, description, close time; optional tags and image URL. |
 | Publish market | Draft row actions; Market detail mod toolbar | `POST /internal/markets/:id/publish` | Confirmation modal showing summary and close schedule. |
 | Update market metadata | Draft + open markets (limited fields) | `POST /internal/markets/:id/update` | Edits limited to description/close time before first bet. |
 | Close market early | Admin Console / Market detail | `POST /internal/markets/:id/close` | Requires reason text; cancels scheduled auto-close. |
@@ -33,6 +33,8 @@
   - Sections for Drafts, Open, Closed (awaiting resolution).
   - Table columns: Title, Status, Bets placed, Pot total, Closes at (countdown), Assigned mod (optional future).
   - Row actions with icon buttons (Publish, Close, Resolve, Void, Edit). Disabled based on status.
+  - Top-level search box (title, tags) and sortable headers for close time, bet count, and creation date.
+  - Tag badges alongside titles highlight metadata; imagery thumbnails render when provided.
 - **Resolution Queue**
   - Filtered list of closed markets pending resolution > X hours; highlighted in red.
   - Bulk actions not allowed (require per-market confirmation).
@@ -43,6 +45,7 @@
 - **Audit Log**
   - Paginated view of recent moderator actions (fetched via `/internal/audit/logs`).
   - Columns: Timestamp, Moderator, Action, Target, Notes, Correlation ID.
+  - JSON payloads collapse by default with expandable sections for deeper inspection.
   - Export button (CSV download) limited to first N entries due to Devvit constraints (generate CSV client-side from fetched data).
 - **Settings (Read-only for Phase 1)**
   - Display current `startingBalance`, `minBet`, `maxBet`, etc.
@@ -107,7 +110,7 @@
 - Consider storing mod action rate limiting per moderator to prevent abuse (e.g., max adjustments per hour). Implement simple counter in Redis if needed.
 
 ## Usability Enhancements
-- Provide search/filter within admin tables (by market title, status).
+- ✅ Search/filter within admin tables (title, tag, status) with sortable headers supporting quick triage.
 - Display relative times ("closes in 45m") with tooltip showing exact timestamp.
 - For create market, allow duplicates detection by offering suggestions if title similar to existing one.
 - Provide context hints (hover tooltips) explaining outcomes: e.g., "Resolving as YES will pay 1.8× to 54 bettors".
@@ -135,4 +138,5 @@
 - ✅ Archive maintenance endpoint is live server-side with schema validation and controller tests, paving the way for console tooling.
 - ✅ Manual balance adjustments now flow through a dedicated service with ledger entries, audit snapshots, and a moderator UI form requiring confirmation safeguards.
 - ✅ End-to-end moderator workflow validated: moderators seed drafts, publish markets, resolve outcomes, and audit logs capture each privileged action.
+- ✅ Moderator tables now include search/sort controls, tag badges, inline imagery, and collapsible audit payloads for recent actions.
 - 🔄 Next up: expose archival controls and dry-run reporting in the moderator console and broaden audit log surfacing for maintenance actions.

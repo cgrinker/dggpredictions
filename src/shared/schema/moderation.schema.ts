@@ -18,6 +18,7 @@ export const ModeratorActionTypeSchema = z.enum([
   'CONFIG_UPDATE',
   'ARCHIVE_MARKETS',
   'PRUNE_MARKETS',
+  'RESET_SYSTEM',
 ]);
 
 export const ModeratorActionSchema = z

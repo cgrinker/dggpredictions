@@ -15,6 +15,9 @@ import type {
   ArchiveMarketsRequest,
   ArchiveMarketsResponse,
   ArchiveMarketsResponseEnvelope,
+  BetHistoryInterval,
+  MarketBetHistoryResponse,
+  MarketBetHistoryResponseEnvelope,
 } from '../../shared/types/dto.js';
 import type { Market } from '../../shared/types/entities.js';
 import { apiFetch, type ApiError } from './client.js';
@@ -157,6 +160,18 @@ export const archiveMarkets = async (
       method: 'POST',
       body: JSON.stringify(payload),
     },
+  );
+
+  return envelope.data;
+};
+
+export const getMarketHistory = async (
+  marketId: string,
+  interval: BetHistoryInterval,
+): Promise<MarketBetHistoryResponse> => {
+  const query = new URLSearchParams({ interval }).toString();
+  const envelope = await apiFetch<MarketBetHistoryResponseEnvelope>(
+    `/api/markets/${marketId}/history?${query}`,
   );
 
   return envelope.data;

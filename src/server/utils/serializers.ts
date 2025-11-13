@@ -46,6 +46,7 @@ export const serializeMarket = (market: Market): RedisHash => ({
   potYes: market.potYes.toString(),
   potNo: market.potNo.toString(),
   totalBets: market.totalBets.toString(),
+  imageUrl: market.imageUrl ?? '',
   metadata: market.metadata ? stringify(market.metadata) : '',
 });
 
@@ -69,6 +70,7 @@ export const deserializeMarket = (hash: RedisHash | null): Market | null => {
     potYes: asNumber(hash.potYes) as Points,
     potNo: asNumber(hash.potNo) as Points,
     totalBets: asNumber(hash.totalBets),
+    imageUrl: hash.imageUrl ? hash.imageUrl : null,
     metadata: hash.metadata ? parseJson(hash.metadata) : undefined,
   });
 

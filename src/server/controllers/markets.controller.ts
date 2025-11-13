@@ -14,6 +14,7 @@ import {
   VoidMarketRequestSchema,
   ArchiveMarketsRequestSchema,
   CreateMarketRequestSchema,
+  BetHistoryIntervalSchema,
 } from '../../shared/schema/dto.schema.js';
 import { ensureValid } from '../../shared/validation.js';
 import { MarketsService } from '../services/markets.service.js';
@@ -35,6 +36,11 @@ const placeBetBodySchema = PlaceBetRequestSchema.pick({ side: true, wager: true 
 const resolveMarketBodySchema = ResolveMarketRequestSchema.pick({ resolution: true, notes: true });
 const voidMarketBodySchema = VoidMarketRequestSchema.pick({ reason: true });
 const publishMarketBodySchema = PublishMarketRequestSchema.pick({ autoCloseOverrideMinutes: true });
+const historyQuerySchema = z
+  .object({
+    interval: BetHistoryIntervalSchema.optional(),
+  })
+  .strict();
 const schedulerCloseBodySchema = z
   .object({
     subredditId: SubredditIdSchema,
@@ -108,6 +114,26 @@ export const registerMarketRoutes = (
     }),
   );
 
+  router.get(
+    '/api/markets/:id/history',
+    asyncHandler(async (req, res) => {
+      const context = req.appContext;
+      if (!context) {
+        throw new ValidationError('Request context unavailable.');
+      }
+
+      const marketId = req.params.id as MarketId;
+      const query = ensureValid(historyQuerySchema, req.query, 'Invalid bet history query.');
+      const result = await dependencies.marketsService.getBetHistory(
+        context.subredditId,
+        marketId,
+        query.interval,
+      );
+
+      res.json({ data: result });
+    }),
+  );
+
   router.post(
     '/api/markets/:id/bets',
     asyncHandler(async (req, res) => {
@@ -150,6 +176,7 @@ export const registerMarketRoutes = (
         title: payload.title,
         description: payload.description,
         closesAt: payload.closesAt,
+        ...(payload.imageUrl ? { imageUrl: payload.imageUrl } : {}),
         ...(payload.tags ? { tags: payload.tags as readonly string[] } : {}),
       };
 

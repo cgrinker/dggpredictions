@@ -181,6 +181,20 @@ body {
 	color: var(--text-primary);
 }
 
+.btn-danger {
+	background: #dc2626;
+	color: #ffffff;
+	border: 1px solid transparent;
+}
+
+.btn-danger:hover {
+	background: #b91c1c;
+}
+
+.btn-danger:disabled {
+	opacity: 0.6;
+}
+
 .badge-soft {
 	background: var(--badge-bg);
 	color: var(--badge-text);

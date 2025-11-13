@@ -37,3 +37,5 @@ export const formatLeaderboardScore = (points: number): string => {
   });
   return formatter.format(points);
 };
+
+export const formatProbability = (value: number): string => `${(value * 100).toFixed(1)}%`;

@@ -12,11 +12,16 @@ import { closeMarket, publishMarket, resolveMarket, archiveMarkets } from '../ap
 import { isApiError } from '../api/client.js';
 import { useMarkets } from '../hooks/useMarkets.js';
 import { useAuditLog } from '../hooks/useAuditLog.js';
-import { formatDateTime, formatPoints } from '../utils/format.js';
+import { formatDateTime, formatPoints, formatProbability } from '../utils/format.js';
 import { ManualAdjustmentPanel } from './ManualAdjustmentPanel.js';
 import { CreateMarketPanel } from './CreateMarketPanel.js';
-import type { IncidentFeed, IncidentSummary, MetricsSummary } from '../../shared/types/dto.js';
-import { getIncidentFeed, getMetricsSummary } from '../api/operations.js';
+import type {
+  IncidentFeed,
+  IncidentSummary,
+  MetricsSummary,
+  SystemResetResponse,
+} from '../../shared/types/dto.js';
+import { getIncidentFeed, getMetricsSummary, resetSystem } from '../api/operations.js';
 import { getConfigState, resetConfigState, updateConfigState } from '../api/config.js';
 
 interface FeedbackState {
@@ -92,6 +97,7 @@ const ACTION_LABELS: Readonly<Record<ModeratorActionLogEntry['action'], string>>
   CONFIG_UPDATE: 'Updated Configuration',
   ARCHIVE_MARKETS: 'Archived Markets',
   PRUNE_MARKETS: 'Pruned Markets',
+  RESET_SYSTEM: 'Reset System',
 };
 
 const formatActionLabel = (action: ModeratorActionLogEntry['action']): string =>
@@ -118,18 +124,30 @@ const buildActionBadges = (
   return badges;
 };
 
-const formatPayloadPreview = (payload: Record<string, unknown> | undefined): string | null => {
+const serializePayload = (payload: Record<string, unknown> | undefined): string | null => {
   if (!payload || Object.keys(payload).length === 0) {
     return null;
   }
 
   try {
-    const serialized = JSON.stringify(payload, null, 2);
-    return serialized.length > 800 ? `${serialized.slice(0, 780)}…` : serialized;
+    return JSON.stringify(payload, null, 2);
   } catch {
     return null;
   }
 };
+
+const extractMarketTags = (market: MarketSummary): string[] => {
+  const raw = market.metadata?.tags;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .map((tag) => (typeof tag === 'string' ? tag.trim() : ''))
+    .filter((tag): tag is string => tag.length > 0);
+};
+
+const getTotalBetVolume = (market: MarketSummary): number => market.potYes + market.potNo;
 
 interface MarketLifecyclePanelProps {
   readonly session: SessionInfo;
@@ -198,7 +216,7 @@ const AUDIT_FILTER_OPTIONS: ReadonlyArray<{
     key: 'retention',
     label: 'Retention',
     description: 'Focus on archive and prune activity.',
-    actions: ['ARCHIVE_MARKETS', 'PRUNE_MARKETS'],
+    actions: ['ARCHIVE_MARKETS', 'PRUNE_MARKETS', 'RESET_SYSTEM'],
   },
   {
     key: 'config',
@@ -335,6 +353,9 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [resolutionDrafts, setResolutionDrafts] = useState<Record<string, ResolutionDraft>>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<'date' | 'totalBets'>('date');
+  const [expandedAuditEntries, setExpandedAuditEntries] = useState<ReadonlySet<string>>(() => new Set());
 
   const [maintenanceFeedback, setMaintenanceFeedback] = useState<FeedbackState | null>(null);
   const [archiveForm, setArchiveForm] = useState<ArchiveFormState>(() => createDefaultArchiveForm());
@@ -362,6 +383,78 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
   const [configSaving, setConfigSaving] = useState(false);
   const [configSuccess, setConfigSuccess] = useState<string | null>(null);
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [systemResetSummary, setSystemResetSummary] = useState<SystemResetResponse | null>(null);
+  const [systemResetError, setSystemResetError] = useState<string | null>(null);
+  const [systemResetPending, setSystemResetPending] = useState(false);
+  const [systemResetConfirmVisible, setSystemResetConfirmVisible] = useState(false);
+
+  const filterAndSortMarkets = useCallback(
+    (markets: readonly MarketSummary[]): MarketSummary[] => {
+      if (markets.length === 0) {
+        return [];
+      }
+
+      const query = searchQuery.trim().toLowerCase();
+      const filtered = query.length === 0
+        ? markets
+        : markets.filter((market) => {
+            const titleMatch = market.title.toLowerCase().includes(query);
+            const tagMatch = extractMarketTags(market).some((tag) => tag.toLowerCase().includes(query));
+            const idMatch = market.id.toLowerCase().includes(query);
+            return titleMatch || tagMatch || idMatch;
+          });
+
+      const sorted = [...filtered].sort((a, b) => {
+        if (sortKey === 'totalBets') {
+          const volumeDelta = getTotalBetVolume(b) - getTotalBetVolume(a);
+          if (volumeDelta !== 0) {
+            return volumeDelta;
+          }
+        } else {
+          const dateA = Date.parse(a.closesAt);
+          const dateB = Date.parse(b.closesAt);
+          if (Number.isFinite(dateA) && Number.isFinite(dateB) && dateA !== dateB) {
+            return dateA - dateB;
+          }
+        }
+
+        const secondaryDelta = getTotalBetVolume(b) - getTotalBetVolume(a);
+        if (secondaryDelta !== 0) {
+          return secondaryDelta;
+        }
+        return a.title.localeCompare(b.title);
+      });
+
+      return sorted;
+    },
+    [searchQuery, sortKey],
+  );
+
+  const visibleDraftMarkets = useMemo(
+    () => filterAndSortMarkets(draftMarkets ?? []),
+    [draftMarkets, filterAndSortMarkets],
+  );
+  const visibleOpenMarkets = useMemo(
+    () => filterAndSortMarkets(openMarkets ?? []),
+    [openMarkets, filterAndSortMarkets],
+  );
+  const visibleClosedMarkets = useMemo(
+    () => filterAndSortMarkets(closedMarkets ?? []),
+    [closedMarkets, filterAndSortMarkets],
+  );
+  const hasActiveMarketFilter = searchQuery.trim().length > 0;
+
+  const toggleAuditEntry = useCallback((entryId: string) => {
+    setExpandedAuditEntries((current) => {
+      const next = new Set(current);
+      if (next.has(entryId)) {
+        next.delete(entryId);
+      } else {
+        next.add(entryId);
+      }
+      return next;
+    });
+  }, []);
 
   const refreshAll = useCallback(async () => {
     await Promise.all([refetchDrafts(), refetchOpen(), refetchClosed(), refetchAudit()]);
@@ -686,6 +779,43 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
     setArchiveConfirmOpen(false);
   }, []);
 
+  const handleSystemResetPrime = useCallback(() => {
+    setSystemResetError(null);
+    setSystemResetSummary(null);
+    setSystemResetConfirmVisible(true);
+  }, []);
+
+  const handleSystemResetCancel = useCallback(() => {
+    setSystemResetConfirmVisible(false);
+    setSystemResetError(null);
+  }, []);
+
+  const handleSystemResetExecute = useCallback(async () => {
+    setSystemResetPending(true);
+    setSystemResetError(null);
+    try {
+      const summary = await resetSystem();
+      setSystemResetSummary(summary);
+      setSystemResetConfirmVisible(false);
+      setMaintenanceFeedback({
+        type: 'success',
+        message: `Deleted ${summary.deletedKeys.toLocaleString()} of ${summary.attemptedKeys.toLocaleString()} Redis keys.`,
+      });
+      await refreshAll();
+      await loadMaintenanceData();
+    } catch (error) {
+      const message = isApiError(error)
+        ? `${error.code}: ${error.message}`
+        : error instanceof Error
+          ? error.message
+          : 'Failed to reset system data.';
+      setSystemResetError(message);
+      setMaintenanceFeedback({ type: 'error', message });
+    } finally {
+      setSystemResetPending(false);
+    }
+  }, [loadMaintenanceData, refreshAll, resetSystem]);
+
   const handleMaintenanceRefresh = useCallback(() => {
     void loadMaintenanceData();
   }, [loadMaintenanceData]);
@@ -851,13 +981,18 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
   }, [onSessionRefresh]);
 
   const renderLifecycleTab = () => {
-    const drafts = draftMarkets ?? [];
-    const open = openMarkets ?? [];
-    const closed = closedMarkets ?? [];
-    const hasDraftsLoading = draftsLoading && drafts.length === 0;
-    const hasOpenLoading = openLoading && open.length === 0;
-    const hasClosedLoading = closedLoading && closed.length === 0;
+    const rawDrafts = draftMarkets ?? [];
+    const rawOpen = openMarkets ?? [];
+    const rawClosed = closedMarkets ?? [];
+    const drafts = visibleDraftMarkets;
+    const open = visibleOpenMarkets;
+    const closed = visibleClosedMarkets;
+    const hasDraftsLoading = draftsLoading && rawDrafts.length === 0;
+    const hasOpenLoading = openLoading && rawOpen.length === 0;
+    const hasClosedLoading = closedLoading && rawClosed.length === 0;
     const refreshing = draftsLoading || openLoading || closedLoading || auditLoading;
+    const totalVisibleCount = drafts.length + open.length + closed.length;
+    const totalMarketCount = rawDrafts.length + rawOpen.length + rawClosed.length;
 
     return (
       <div className="flex flex-col gap-6">
@@ -894,62 +1029,112 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
           <CreateMarketPanel onCreated={refreshAll} />
         </section>
 
+        <section className="rounded-2xl theme-card p-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <label className="flex w-full flex-col gap-1 text-sm theme-heading sm:max-w-xs">
+              Search markets
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="input-control rounded-md px-3 py-2 text-sm"
+                placeholder="Filter by title, tag, or market id"
+              />
+            </label>
+            <label className="flex w-full flex-col gap-1 text-sm theme-heading sm:max-w-xs">
+              Sort by
+              <select
+                value={sortKey}
+                onChange={(event) => setSortKey(event.target.value as 'date' | 'totalBets')}
+                className="input-control rounded-md px-3 py-2 text-sm"
+              >
+                <option value="date">Closing soonest</option>
+                <option value="totalBets">Total bet volume</option>
+              </select>
+            </label>
+          </div>
+          {hasActiveMarketFilter && (
+            <p className="text-xs theme-muted">
+              Showing {totalVisibleCount.toLocaleString()} of {totalMarketCount.toLocaleString()} markets across all tabs.
+            </p>
+          )}
+        </section>
+
         <section className="flex flex-col gap-3">
           <h3 className="text-lg font-semibold theme-heading">Draft Markets</h3>
           {hasDraftsLoading ? (
             <p className="text-sm theme-subtle">Loading drafts…</p>
           ) : drafts.length === 0 ? (
-            <p className="text-sm theme-subtle">No draft markets ready to publish.</p>
+            <p className="text-sm theme-subtle">
+              {hasActiveMarketFilter
+                ? 'No draft markets matched the current filters.'
+                : 'No draft markets ready to publish.'}
+            </p>
           ) : (
             <ul className="flex flex-col gap-3">
-              {drafts.map((market) => (
-                <li key={market.id} className="rounded-2xl theme-card p-6">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <div>
-                        <h4 className="text-lg font-semibold theme-heading">{market.title}</h4>
-                        <p className="text-sm theme-subtle">Closes {formatDateTime(market.closesAt)}</p>
+              {drafts.map((market) => {
+                const tags = extractMarketTags(market);
+                return (
+                  <li key={market.id} className="rounded-2xl theme-card p-6">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <h4 className="text-lg font-semibold theme-heading">{market.title}</h4>
+                          <p className="text-sm theme-subtle">Closes {formatDateTime(market.closesAt)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="btn-base btn-primary px-4 py-2 text-sm"
+                            onClick={() => void handlePublish(market)}
+                            disabled={isPending(market, 'publish')}
+                          >
+                            {isPending(market, 'publish') ? 'Publishing…' : 'Publish'}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-base btn-ghost px-4 py-2 text-sm"
+                            onClick={() => void handlePublish(market, null)}
+                            disabled={isPending(market, 'publish')}
+                          >
+                            {isPending(market, 'publish') ? 'Publishing…' : 'Publish w/out Auto-Close'}
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          className="btn-base btn-primary px-4 py-2 text-sm"
-                          onClick={() => void handlePublish(market)}
-                          disabled={isPending(market, 'publish')}
-                        >
-                          {isPending(market, 'publish') ? 'Publishing…' : 'Publish'}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-base btn-ghost px-4 py-2 text-sm"
-                          onClick={() => void handlePublish(market, null)}
-                          disabled={isPending(market, 'publish')}
-                        >
-                          {isPending(market, 'publish') ? 'Publishing…' : 'Publish w/out Auto-Close'}
-                        </button>
-                      </div>
+                      {tags.length > 0 && (
+                        <ul className="flex flex-wrap items-center gap-2 text-[11px] theme-muted">
+                          {tags.map((tag) => (
+                            <li
+                              key={`${market.id}-tag-${tag}`}
+                              className="badge-soft px-2 py-1 uppercase tracking-wide"
+                            >
+                              {tag}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <dl className="grid grid-cols-2 gap-y-1 text-xs theme-muted sm:grid-cols-4">
+                        <div>
+                          <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
+                          <dd>{formatPoints(market.potYes)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium theme-heading text-xs">Pot No</dt>
+                          <dd>{formatPoints(market.potNo)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium theme-heading text-xs">Total Bets</dt>
+                          <dd>{market.totalBets}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium theme-heading text-xs">Implied Yes</dt>
+                          <dd>{formatProbability(market.impliedYesProbability)}</dd>
+                        </div>
+                      </dl>
                     </div>
-                    <dl className="grid grid-cols-2 gap-y-1 text-xs theme-muted sm:grid-cols-4">
-                      <div>
-                        <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
-                        <dd>{formatPoints(market.potYes)}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium theme-heading text-xs">Pot No</dt>
-                        <dd>{formatPoints(market.potNo)}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium theme-heading text-xs">Total Bets</dt>
-                        <dd>{market.totalBets}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium theme-heading text-xs">Implied Yes</dt>
-                        <dd>{market.impliedYesPayout}x</dd>
-                      </div>
-                    </dl>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -959,47 +1144,66 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
           {hasOpenLoading ? (
             <p className="text-sm theme-subtle">Loading open markets…</p>
           ) : open.length === 0 ? (
-            <p className="text-sm theme-subtle">No open markets currently accepting bets.</p>
+            <p className="text-sm theme-subtle">
+              {hasActiveMarketFilter
+                ? 'No open markets matched the current filters.'
+                : 'No open markets currently accepting bets.'}
+            </p>
           ) : (
             <ul className="flex flex-col gap-3">
-              {open.map((market) => (
-                <li key={market.id} className="rounded-2xl theme-card p-6">
-                  <div className="flex flex-col gap-2">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <div>
-                        <h4 className="text-lg font-semibold theme-heading">{market.title}</h4>
-                        <p className="text-sm theme-subtle">Closes {formatDateTime(market.closesAt)}</p>
+              {open.map((market) => {
+                const tags = extractMarketTags(market);
+                return (
+                  <li key={market.id} className="rounded-2xl theme-card p-6">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <h4 className="text-lg font-semibold theme-heading">{market.title}</h4>
+                          <p className="text-sm theme-subtle">Closes {formatDateTime(market.closesAt)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-base btn-primary px-4 py-2 text-sm"
+                          onClick={() => void handleClose(market)}
+                          disabled={isPending(market, 'close')}
+                        >
+                          {isPending(market, 'close') ? 'Closing…' : 'Close Market'}
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="btn-base btn-primary px-4 py-2 text-sm"
-                        onClick={() => void handleClose(market)}
-                        disabled={isPending(market, 'close')}
-                      >
-                        {isPending(market, 'close') ? 'Closing…' : 'Close Market'}
-                      </button>
+                      {tags.length > 0 && (
+                        <ul className="flex flex-wrap items-center gap-2 text-[11px] theme-muted">
+                          {tags.map((tag) => (
+                            <li
+                              key={`${market.id}-tag-${tag}`}
+                              className="badge-soft px-2 py-1 uppercase tracking-wide"
+                            >
+                              {tag}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <dl className="grid grid-cols-2 gap-y-1 text-xs theme-muted sm:grid-cols-4">
+                        <div>
+                          <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
+                          <dd>{formatPoints(market.potYes)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium theme-heading text-xs">Pot No</dt>
+                          <dd>{formatPoints(market.potNo)}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium theme-heading text-xs">Total Bets</dt>
+                          <dd>{market.totalBets}</dd>
+                        </div>
+                        <div>
+                          <dt className="font-medium theme-heading text-xs">Implied No</dt>
+                          <dd>{formatProbability(market.impliedNoProbability)}</dd>
+                        </div>
+                      </dl>
                     </div>
-                    <dl className="grid grid-cols-2 gap-y-1 text-xs theme-muted sm:grid-cols-4">
-                      <div>
-                        <dt className="font-medium theme-heading text-xs">Pot Yes</dt>
-                        <dd>{formatPoints(market.potYes)}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium theme-heading text-xs">Pot No</dt>
-                        <dd>{formatPoints(market.potNo)}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium theme-heading text-xs">Total Bets</dt>
-                        <dd>{market.totalBets}</dd>
-                      </div>
-                      <div>
-                        <dt className="font-medium theme-heading text-xs">Implied No</dt>
-                        <dd>{market.impliedNoPayout}x</dd>
-                      </div>
-                    </dl>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -1014,7 +1218,11 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
           {hasClosedLoading ? (
             <p className="text-sm theme-subtle">Loading closed markets…</p>
           ) : closed.length === 0 ? (
-            <p className="text-sm theme-subtle">No closed markets waiting on resolution.</p>
+            <p className="text-sm theme-subtle">
+              {hasActiveMarketFilter
+                ? 'No closed markets matched the current filters.'
+                : 'No closed markets waiting on resolution.'}
+            </p>
           ) : (
             <ul className="flex flex-col gap-3">
               {closed.map((market) => {
@@ -1022,6 +1230,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
                 const auditEntries = buildAuditEntries(market.metadata);
                 const rawLastClosedAt = market.metadata?.['lastClosedAt'];
                 const closedTimestamp = isString(rawLastClosedAt) ? rawLastClosedAt : market.closesAt;
+                const tags = extractMarketTags(market);
 
                 return (
                   <li key={market.id} className="rounded-2xl theme-card p-6">
@@ -1032,6 +1241,19 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
                           Closed {formatDateTime(closedTimestamp)} • Total bets {market.totalBets}
                         </p>
                       </div>
+
+                      {tags.length > 0 && (
+                        <ul className="flex flex-wrap items-center gap-2 text-[11px] theme-muted">
+                          {tags.map((tag) => (
+                            <li
+                              key={`${market.id}-tag-${tag}`}
+                              className="badge-soft px-2 py-1 uppercase tracking-wide"
+                            >
+                              {tag}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-2">
                         {(['yes', 'no'] as const).map((side) => (
@@ -1113,11 +1335,11 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
                         </div>
                         <div>
                           <dt className="font-medium theme-heading text-xs">Implied Yes</dt>
-                          <dd>{market.impliedYesPayout}x</dd>
+                          <dd>{formatProbability(market.impliedYesProbability)}</dd>
                         </div>
                         <div>
                           <dt className="font-medium theme-heading text-xs">Implied No</dt>
-                          <dd>{market.impliedNoPayout}x</dd>
+                          <dd>{formatProbability(market.impliedNoProbability)}</dd>
                         </div>
                       </dl>
 
@@ -1182,7 +1404,10 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             <ul className="flex flex-col gap-3">
               {filteredAuditActions.map((entry) => {
                 const badges = buildActionBadges(entry);
-                const payloadPreview = formatPayloadPreview(entry.payload);
+                const payloadJson = serializePayload(entry.payload);
+                const isExpanded = expandedAuditEntries.has(entry.id);
+                const hasDetails = badges.length > 0 || payloadJson !== null || Boolean(entry.snapshot);
+
                 return (
                   <li key={entry.id} className="rounded-2xl theme-card p-6">
                     <div className="flex flex-col gap-2">
@@ -1196,23 +1421,43 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
                           {entry.performedByUsername || entry.performedBy}
                         </div>
                       </div>
-                      {badges.length > 0 && (
-                        <ul className="flex flex-wrap items-center gap-2 text-[11px] theme-muted">
-                          {badges.map((badge) => (
-                            <li key={`${entry.id}-${badge.label}`} className="badge-soft px-2.5 py-1">
-                              <span className="font-medium theme-heading text-[11px]">{badge.label}:</span>{' '}
-                              {badge.value}
-                            </li>
-                          ))}
-                        </ul>
+
+                      {hasDetails && (
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] theme-muted">
+                          <button
+                            type="button"
+                            className="btn-base btn-ghost px-2.5 py-1"
+                            onClick={() => toggleAuditEntry(entry.id)}
+                          >
+                            {isExpanded ? 'Hide details' : 'Show details'}
+                          </button>
+                          {entry.snapshot && !isExpanded && (
+                            <span className="badge-soft px-2 py-1 uppercase tracking-wide">Snapshot saved</span>
+                          )}
+                        </div>
                       )}
-                      {payloadPreview && (
-                        <pre className="overflow-x-auto code-block text-xs">{payloadPreview}</pre>
-                      )}
-                      {entry.snapshot && (
-                        <p className="text-xs theme-muted">
-                          Snapshot captured with before/after state for this action.
-                        </p>
+
+                      {isExpanded && (
+                        <div className="flex flex-col gap-2">
+                          {badges.length > 0 && (
+                            <ul className="flex flex-wrap items-center gap-2 text-[11px] theme-muted">
+                              {badges.map((badge) => (
+                                <li key={`${entry.id}-${badge.label}`} className="badge-soft px-2.5 py-1">
+                                  <span className="font-medium theme-heading text-[11px]">{badge.label}:</span>{' '}
+                                  {badge.value}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {payloadJson && (
+                            <pre className="overflow-x-auto code-block text-xs">{payloadJson}</pre>
+                          )}
+                          {entry.snapshot && (
+                            <p className="text-xs theme-muted">
+                              Snapshot captured with before/after state for this action.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </li>
@@ -1322,6 +1567,64 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
             {maintenanceFeedback.message}
           </div>
         )}
+
+        <section className="rounded-2xl theme-card p-6 flex flex-col gap-5">
+          <div>
+            <h3 className="text-lg font-semibold theme-heading">Full System Reset</h3>
+            <p className="text-sm theme-subtle">
+              Permanently delete all markets, bets, balances, leaderboards, config overrides, and audit logs for this subreddit. This action cannot be undone.
+            </p>
+          </div>
+
+          {systemResetError && (
+            <div className="rounded px-3 py-2 text-sm feedback-error">{systemResetError}</div>
+          )}
+
+          {systemResetSummary && (
+            <div className="rounded px-3 py-2 text-sm feedback-success">
+              Deleted {systemResetSummary.deletedKeys.toLocaleString()} of {systemResetSummary.attemptedKeys.toLocaleString()} keys
+              {systemResetSummary.errors > 0
+                ? ` · ${systemResetSummary.errors} deletion error${systemResetSummary.errors === 1 ? '' : 's'} recorded`
+                : ' without errors'}
+              .
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3">
+            {systemResetConfirmVisible ? (
+              <>
+                <button
+                  type="button"
+                  className="btn-base btn-danger px-4 py-2 text-sm"
+                  onClick={() => void handleSystemResetExecute()}
+                  disabled={systemResetPending}
+                >
+                  {systemResetPending ? 'Resetting…' : 'Are you sure?'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-base btn-ghost px-4 py-2 text-sm"
+                  onClick={handleSystemResetCancel}
+                  disabled={systemResetPending}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn-base btn-danger px-4 py-2 text-sm"
+                onClick={handleSystemResetPrime}
+                disabled={systemResetPending}
+              >
+                Reset all data
+              </button>
+            )}
+            <p className="text-xs theme-muted">
+              Audit logs capture the moderator username, timestamp, and result summary.
+            </p>
+          </div>
+        </section>
 
         {archiveError && <div className="rounded px-4 py-3 text-sm feedback-error">{archiveError}</div>}
 
@@ -1583,7 +1886,7 @@ export const MarketLifecyclePanel = ({ session, onSessionRefresh }: MarketLifecy
                             </div>
                             <div>
                               <dt className="text-xs uppercase tracking-wide theme-subtle">Implied Yes</dt>
-                              <dd>{candidate.impliedYesPayout}x</dd>
+                              <dd>{formatProbability(candidate.impliedYesProbability)}</dd>
                             </div>
                           </dl>
                         </li>

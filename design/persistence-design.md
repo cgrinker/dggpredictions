@@ -154,7 +154,7 @@ Devvit Settings (per installation)
 - Transaction helper utilities with logging/instrumentation.
 - Tests covering bet placement, resolution, refund flows, leaderboard updates, and scheduler job scheduling/cancellation.
 
-## Implementation Progress (Nov 11, 2025)
+## Implementation Progress (Nov 12, 2025)
 - ✅ Redis repositories and transaction utilities underpin markets, bets, balances, ledger entries, config caching, and scheduler job metadata.
 - ✅ Config caching validated against shared schemas with TTL-backed snapshots for fast reads.
 - ✅ Market repository maintains status indices and user bet pointers; bet repository powers wallet/history listings with per-user indexes.
@@ -163,4 +163,5 @@ Devvit Settings (per installation)
 - ✅ Scheduler repository/service manage market-close jobs and now integrate with MarketsService to clean persistence when jobs fire.
 - ✅ Market metadata schema expanded to track publish/close actors, overrides, and scheduler-driven closures for future archival policies.
 - ✅ Archive pathway removes settled markets via transactional bet deletion, pointer cleanup, and metadata stamping, with repository/service helpers now exercised by tests.
+- ✅ Market records persist optional moderator-provided `imageUrl` metadata, leveraging Devvit media uploads and relaxed validation for extensionless links.
 - 🔄 Next up: automate retention scheduling, expose archival metrics, and explore long-term export options for deep history.

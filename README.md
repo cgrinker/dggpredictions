@@ -4,10 +4,10 @@ Prediction market companion for the r/Destiny subreddit built on Reddit's Devvit
 
 ### Features
 
-- Participant navigation with quick access to Markets, Market Detail, Wallet, My Bets, and Leaderboard screens.
-- Moderator lifecycle console for publishing, closing, resolving, and auditing subreddit markets.
-- Shared API layer and hooks for markets, bets, wallet balances, and leaderboard snapshots.
-- Tailwind-styled React UI bundled through Vite for both client and server webviews.
+- Participant navigation with quick access to Markets, Market Detail, Wallet, My Bets, and Leaderboard screens, including inline bet history and current-position highlights.
+- Moderator lifecycle console with search and sort controls, market tag badges, collapsible audit payloads, and one-click lifecycle actions.
+- Shared API layer and hooks for markets, bets, wallet balances, bet history intervals, and leaderboard snapshots.
+- Tailwind-styled React UI bundled through Vite for both client and server webviews, backed by deterministic Redis reset tooling and image upload helpers.
 
 ### Prerequisites
 
@@ -36,6 +36,7 @@ Server-side controllers and services live under `src/server`. Vitest-based unit 
 
 ### Current Progress
 
-- Backend audit logging is wired through the markets service, repository, and controller layers, and covered by unit tests (`markets.service.test.ts`, `audit.controller.test.ts`).
-- Moderator lifecycle console now includes a recent audit log viewer that consumes `/internal/audit/logs` via a dedicated client hook.
-- Repository retention trims audit history to ~2k entries per subreddit with a default fetch cap of 100 to balance visibility with storage costs.
+- Operations reset flow now walks Redis deterministically, collapsing wildcard scans into targeted key discovery with regression coverage (`operations.service.test.ts`).
+- Moderator lifecycle console ships searchable/sortable market tables, tag metadata, collapsible action payloads, and inline bet summaries on the market detail form.
+- Client hooks expanded to include market bet history (`useMarketHistory`), enabling interval-aware charts and re-fetch controls.
+- Market imagery pipeline accepts optional extensionless URLs, proxies uploads through Devvit media, and falls back to refreshed default artwork.

@@ -65,6 +65,11 @@ const MarketSchemaCore = z
     potYes: PointsSchema,
     potNo: PointsSchema,
     totalBets: z.number().int().min(0),
+    imageUrl: z
+      .string()
+      .url()
+      .max(2_048)
+      .nullable(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();

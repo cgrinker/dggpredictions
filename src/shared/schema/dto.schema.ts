@@ -42,8 +42,13 @@ export const MarketSummarySchema = z
     potYes: PointsSchema,
     potNo: PointsSchema,
     totalBets: z.number().int().min(0),
-    impliedYesPayout: z.number().positive(),
-    impliedNoPayout: z.number().positive(),
+    impliedYesProbability: z.number().min(0).max(1),
+    impliedNoProbability: z.number().min(0).max(1),
+    imageUrl: z
+      .string()
+      .url()
+      .max(2_048)
+      .nullable(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();
@@ -51,6 +56,32 @@ export const MarketSummarySchema = z
 export const MarketDetailSchema = MarketSchemaBase.extend({
   userBet: BetSchema.nullable(),
 });
+
+export const BetHistoryIntervalSchema = z.enum(['hour', 'day', 'week', 'month']);
+
+export const BetHistoryPointSchema = z
+  .object({
+    start: ISODateStringSchema,
+    end: ISODateStringSchema,
+    cumulativePotYes: PointsSchema,
+    cumulativePotNo: PointsSchema,
+    cumulativeBets: z.number().int().min(0),
+  })
+  .strict();
+
+export const MarketBetHistorySeriesSchema = z
+  .object({
+    interval: BetHistoryIntervalSchema,
+    points: z.array(BetHistoryPointSchema).readonly(),
+  })
+  .strict();
+
+export const MarketBetHistoryResponseSchema = z
+  .object({
+    marketId: MarketIdSchema,
+    intervals: z.array(MarketBetHistorySeriesSchema).readonly(),
+  })
+  .strict();
 
 export const BetSummarySchema = z
   .object({
@@ -102,6 +133,11 @@ export const CreateMarketRequestSchema = z
     title: z.string().min(1).max(140),
     description: z.string().min(1).max(4000),
     closesAt: ISODateStringSchema,
+    imageUrl: z
+      .string()
+      .url()
+      .max(2_048)
+      .optional(),
     tags: z.array(z.string().min(1)).max(10).optional(),
   })
   .strict();
@@ -157,6 +193,21 @@ export const AdjustBalanceResponseSchema = z
   .object({
     balance: UserBalanceSchema,
     auditAction: ModeratorActionSchema,
+  })
+  .strict();
+
+export const SystemResetRequestSchema = z
+  .object({
+    confirm: z.literal(true),
+    reason: z.string().min(1).max(500).optional(),
+  })
+  .strict();
+
+export const SystemResetResponseSchema = z
+  .object({
+    attemptedKeys: z.number().int().min(0),
+    deletedKeys: z.number().int().min(0),
+    errors: z.number().int().min(0),
   })
   .strict();
 

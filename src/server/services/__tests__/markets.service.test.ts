@@ -28,6 +28,14 @@ vi.mock('../../utils/transactions.js', () => ({
   runTransactionWithRetry: (...args: unknown[]) => runTransactionMock(...args),
 }));
 
+const mediaUploadMock = vi.fn();
+
+vi.mock('@devvit/media', () => ({
+  media: {
+    upload: mediaUploadMock,
+  },
+}));
+
 let MarketsServiceClass: typeof import('../markets.service.js').MarketsService;
 type SettlementState = {
   market: Market;
@@ -60,6 +68,7 @@ const createMarket = (overrides: Partial<Market> = {}): Market => ({
   potYes: 1_000 as Points,
   potNo: 1_000 as Points,
   totalBets: 2,
+  imageUrl: null,
   metadata: {},
   ...overrides,
 });
@@ -114,6 +123,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mediaUploadMock.mockReset();
 });
 
 describe('MarketsService createDraft', () => {
@@ -149,6 +159,7 @@ describe('MarketsService createDraft', () => {
         maintenanceMode: false,
         enableRealtimeUpdates: true,
         enableLeaderboard: true,
+        enableConfigEditor: true,
       },
     };
 
@@ -186,6 +197,7 @@ describe('MarketsService createDraft', () => {
       'sub-1',
       expect.objectContaining({ title: 'Example Market', status: 'draft' }),
     );
+    expect(mediaUploadMock).not.toHaveBeenCalled();
 
     expect(auditService.recordAction).toHaveBeenCalledWith('sub-1', {
       performedBy: 'mod-1',
@@ -198,6 +210,237 @@ describe('MarketsService createDraft', () => {
         tags: ['tag1', 'tag2'],
       },
     });
+  });
+
+  it('uploads provided image and stores returned media url', async () => {
+    const marketsRepo: Partial<MarketRepository> = {
+      list: vi.fn().mockResolvedValue({ markets: [], total: 0 }),
+      create: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const auditService: Partial<AuditLogService> = {
+      recordAction: vi.fn().mockResolvedValue({
+        schemaVersion: 1,
+        id: 'audit-456' as ModeratorActionId,
+        subredditId: 'sub-1' as SubredditId,
+        performedBy: 'mod-1' as UserId,
+        performedByUsername: 'mod-user',
+        action: 'CREATE_MARKET',
+        marketId: 'market-1' as MarketId,
+        targetUserId: null,
+        payload: {},
+        createdAt: new Date().toISOString(),
+      }),
+    };
+
+    const baseConfig: AppConfig = {
+      startingBalance: 1_000,
+      minBet: 1,
+      maxBet: null,
+      maxOpenMarkets: null,
+      leaderboardWindow: 'weekly',
+      autoCloseGraceMinutes: 5,
+      featureFlags: {
+        maintenanceMode: false,
+        enableRealtimeUpdates: true,
+        enableLeaderboard: true,
+        enableConfigEditor: true,
+      },
+    };
+
+    const configService: Partial<ConfigService> = {
+      getConfig: vi.fn().mockResolvedValue(baseConfig),
+    };
+
+    const uploadedUrl = 'https://reddit.com/media/xyz.png';
+    mediaUploadMock.mockResolvedValue({ mediaId: 'xyz', mediaUrl: uploadedUrl });
+
+    const service = new MarketsServiceClass(
+      marketsRepo as MarketRepository,
+      {} as BetRepository,
+      {} as BalanceRepository,
+      {} as LedgerService,
+      {} as SchedulerService,
+      configService as ConfigService,
+      auditService as AuditLogService,
+    );
+
+    const closesAt = new Date(Date.now() + 60_000).toISOString();
+    const sourceUrl = 'https://example.com/market-image.png';
+    const result = await service.createDraft(
+      'sub-1' as SubredditId,
+      'mod-1' as UserId,
+      {
+        title: 'Example Market',
+        description: 'Sample description',
+        closesAt,
+        imageUrl: sourceUrl,
+      },
+      { creatorUsername: 'mod-user' },
+    );
+
+    expect(mediaUploadMock).toHaveBeenCalledWith({ url: sourceUrl, type: 'image' });
+    expect(result.imageUrl).toBe(uploadedUrl);
+    expect(marketsRepo.create).toHaveBeenCalledWith(
+      'sub-1',
+      expect.objectContaining({ imageUrl: uploadedUrl }),
+    );
+    expect(auditService.recordAction).toHaveBeenCalledWith('sub-1', expect.objectContaining({
+      payload: expect.objectContaining({ imageUrl: uploadedUrl }),
+    }));
+  });
+});
+
+describe('MarketsService getBetHistory', () => {
+  it('aggregates bets across supported intervals', async () => {
+    const market = createMarket({
+      id: 'market-history' as MarketId,
+      status: 'open',
+      potYes: 0 as Points,
+      potNo: 0 as Points,
+      totalBets: 0,
+    });
+
+    const bets: Bet[] = [
+      createBet({
+        id: 'bet-1' as Bet['id'],
+        createdAt: '2025-01-01T12:00:00.000Z',
+        side: 'yes',
+        wager: 100 as Points,
+      }),
+      createBet({
+        id: 'bet-2' as Bet['id'],
+        createdAt: '2025-01-02T01:00:00.000Z',
+        side: 'no',
+        wager: 50 as Points,
+      }),
+      createBet({
+        id: 'bet-3' as Bet['id'],
+        createdAt: '2025-01-08T03:15:00.000Z',
+        side: 'yes',
+        wager: 75 as Points,
+      }),
+    ];
+
+    const marketsRepo: Partial<MarketRepository> = {
+      getById: vi.fn().mockResolvedValue(market),
+    };
+    const betRepo: Partial<BetRepository> = {
+      listByMarket: vi.fn().mockResolvedValue(bets),
+    };
+
+    const service = new MarketsServiceClass(
+      marketsRepo as MarketRepository,
+      betRepo as BetRepository,
+      {} as BalanceRepository,
+      {} as LedgerService,
+      {} as SchedulerService,
+      {} as ConfigService,
+      {} as AuditLogService,
+    );
+
+    const history = await service.getBetHistory(market.subredditId, market.id);
+
+    expect(marketsRepo.getById).toHaveBeenCalledWith(market.subredditId, market.id);
+    expect(betRepo.listByMarket).toHaveBeenCalledWith(market.subredditId, market.id);
+  expect(history.marketId).toBe(market.id);
+  expect(history.intervals).toHaveLength(4);
+
+  const hourSeries = history.intervals.find((entry) => entry.interval === 'hour');
+  expect(hourSeries?.points).toHaveLength(3);
+  expect(hourSeries?.points[0].start).toBe('2025-01-01T12:00:00.000Z');
+  expect(hourSeries?.points[0].cumulativePotYes).toBe(100);
+  expect(hourSeries?.points[1].start).toBe('2025-01-02T01:00:00.000Z');
+  expect(hourSeries?.points[1].cumulativePotNo).toBe(50);
+  expect(hourSeries?.points[2].start).toBe('2025-01-08T03:00:00.000Z');
+  expect(hourSeries?.points[2].cumulativePotYes).toBe(175);
+
+    const daySeries = history.intervals.find((entry) => entry.interval === 'day');
+    expect(daySeries?.points).toHaveLength(3);
+    expect(daySeries?.points[0].cumulativePotYes).toBe(100);
+    expect(daySeries?.points[1].cumulativePotNo).toBe(50);
+    expect(daySeries?.points[2].cumulativePotYes).toBe(175);
+
+    const weekSeries = history.intervals.find((entry) => entry.interval === 'week');
+    expect(weekSeries?.points).toHaveLength(2);
+    expect(weekSeries?.points[0].start).toBe('2024-12-30T00:00:00.000Z');
+    expect(weekSeries?.points[0].cumulativePotYes).toBe(100);
+    expect(weekSeries?.points[1].cumulativePotYes).toBe(175);
+
+    const monthSeries = history.intervals.find((entry) => entry.interval === 'month');
+    expect(monthSeries?.points).toHaveLength(1);
+    expect(monthSeries?.points[0].cumulativeBets).toBe(3);
+  });
+
+  it('returns empty series when a market has no bets', async () => {
+    const market = createMarket({
+      id: 'market-empty' as MarketId,
+      status: 'open',
+    });
+
+    const marketsRepo: Partial<MarketRepository> = {
+      getById: vi.fn().mockResolvedValue(market),
+    };
+    const betRepo: Partial<BetRepository> = {
+      listByMarket: vi.fn().mockResolvedValue([]),
+    };
+
+    const service = new MarketsServiceClass(
+      marketsRepo as MarketRepository,
+      betRepo as BetRepository,
+      {} as BalanceRepository,
+      {} as LedgerService,
+      {} as SchedulerService,
+      {} as ConfigService,
+      {} as AuditLogService,
+    );
+
+    const history = await service.getBetHistory(market.subredditId, market.id);
+
+    expect(history.intervals).toHaveLength(4);
+    expect(history.intervals.every((entry) => entry.points.length === 0)).toBe(true);
+  });
+
+  it('supports fetching a specific interval', async () => {
+    const market = createMarket({ id: 'market-hourly' as MarketId, status: 'open' });
+    const bets: Bet[] = [
+      createBet({
+        id: 'bet-1' as Bet['id'],
+        createdAt: '2025-01-01T00:15:00.000Z',
+        side: 'yes',
+        wager: 25 as Points,
+      }),
+      createBet({
+        id: 'bet-2' as Bet['id'],
+        createdAt: '2025-01-01T01:45:00.000Z',
+        side: 'no',
+        wager: 30 as Points,
+      }),
+    ];
+
+    const marketsRepo: Partial<MarketRepository> = {
+      getById: vi.fn().mockResolvedValue(market),
+    };
+    const betRepo: Partial<BetRepository> = {
+      listByMarket: vi.fn().mockResolvedValue(bets),
+    };
+
+    const service = new MarketsServiceClass(
+      marketsRepo as MarketRepository,
+      betRepo as BetRepository,
+      {} as BalanceRepository,
+      {} as LedgerService,
+      {} as SchedulerService,
+      {} as ConfigService,
+      {} as AuditLogService,
+    );
+
+    const history = await service.getBetHistory(market.subredditId, market.id, 'hour');
+
+    expect(history.intervals).toHaveLength(1);
+    expect(history.intervals[0].interval).toBe('hour');
+    expect(history.intervals[0].points).toHaveLength(2);
+    expect(history.intervals[0].points[1].cumulativePotNo).toBe(30);
   });
 });
 
@@ -248,6 +491,7 @@ const setupService = (options?: {
       maintenanceMode: false,
       enableRealtimeUpdates: true,
       enableLeaderboard: true,
+      enableConfigEditor: true,
     },
   };
 

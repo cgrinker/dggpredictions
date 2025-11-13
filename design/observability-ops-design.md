@@ -108,8 +108,10 @@
 - Build anomaly detection ML/heuristics (out of scope now).
 - Automate release notes generation from audit log of deployments.
 
-## Implementation Progress (Nov 11, 2025)
+## Implementation Progress (Nov 12, 2025)
 - ✅ Structured logging, error handling, and correlation-aware responses are live in the server bundle and covered by unit tests.
 - ✅ Scheduler service tests exercise job scheduling/cancellation logging to confirm telemetry hooks function.
+- ✅ System reset flow now uses deterministic key discovery with accompanying tests, improving operational confidence in purge operations.
+- ✅ Deployment playbook updated with moderator console smoke checks (search/sort, audit payload collapse) and reset verification steps.
 - 🔄 Metrics counters, incident surfacing in the moderator console, and automated operational runbooks remain on the roadmap.
 - 🔄 Deployment/staging automation and regression checklists need codifying before broader rollout.

@@ -153,7 +153,7 @@ Errors raised by services should include machine-readable `code` (e.g., `MARKET_
 - Controller/service/repository skeletons with TODOs referencing persistence functions.
 - Automated tests covering core flows.
 
-## Implementation Progress (Nov 11, 2025)
+## Implementation Progress (Nov 12, 2025)
 - ✅ Core services (`ConfigService`, `MarketsService`, `BetsService`, `LedgerService`) and repositories handle config reads, bet placement, settlements, and ledger writes under transactional helpers.
 - ✅ Middleware stack (tracing, context hydration, auth, error handling) and public controllers expose participant routes for markets, wallet, bets, and leaderboards.
 - ✅ Moderator resolve/void flows execute settlements/refunds with ledger integration and accompanying Vitest coverage.
@@ -162,4 +162,6 @@ Errors raised by services should include machine-readable `code` (e.g., `MARKET_
 - ✅ Moderator publish/close endpoints plus the `/internal/scheduler/market-close` handler are live, invoking the enhanced service methods and logging skipped jobs.
 - ✅ Lifecycle test suite expanded to cover publish, manual close, scheduler auto-close, and override handling.
 - ✅ Archive tooling in `MarketsService` and `/internal/markets/archive` now prunes aged resolved/void markets with transactional cleanup, surfaced through new service and controller tests.
+- ✅ `MarketsService` exposes bet history retrieval consumed by `/api/markets/:id/history`, enabling client charts via `useMarketHistory` and tested across controller/service layers.
+- ✅ Operations reset flow deterministically enumerates Redis keys for deletion, replacing wildcard scans and gaining targeted coverage in `operations.service.test.ts` and controller suites.
 - 🔄 Remaining work: wire archival maintenance into the moderator console, expand audit/metrics coverage around archive runs, and continue hardening moderator workflow tooling.
