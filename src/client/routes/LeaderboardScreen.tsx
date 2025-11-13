@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useLeaderboard } from '../hooks/useLeaderboard.js';
 import { formatLeaderboardScore } from '../utils/format.js';
 import { themeTokens } from '../utils/theme.js';
+import { setLeaderboardFlair } from '../api/leaderboard.js';
+import { isApiError } from '../api/client.js';
 
 const WINDOWS: ReadonlyArray<{ readonly value: 'weekly' | 'monthly' | 'alltime'; readonly label: string }> = [
   { value: 'weekly', label: 'Weekly' },
@@ -13,6 +15,45 @@ export const LeaderboardScreen = () => {
   const [window, setWindow] = useState<'weekly' | 'monthly' | 'alltime'>('weekly');
   const leaderboardState = useLeaderboard(window);
   const { data, isLoading, error, refetch } = leaderboardState;
+  const [isUpdatingFlair, setIsUpdatingFlair] = useState(false);
+  const [flairFeedback, setFlairFeedback] = useState<
+    { readonly type: 'success' | 'error'; readonly message: string }
+    | null
+  >(null);
+
+  const handleSetFlair = useCallback(async () => {
+    if (!data?.currentUser) {
+      setFlairFeedback({
+        type: 'error',
+        message: 'You need a leaderboard rank before updating flair.',
+      });
+      return;
+    }
+
+    setIsUpdatingFlair(true);
+    setFlairFeedback(null);
+
+    try {
+      const result = await setLeaderboardFlair({ window });
+      setFlairFeedback({
+        type: 'success',
+        message: `Flair updated to “${result.flairText}”.`,
+      });
+    } catch (err) {
+      if (isApiError(err)) {
+        setFlairFeedback({ type: 'error', message: err.message });
+      } else if (err instanceof Error) {
+        setFlairFeedback({ type: 'error', message: err.message });
+      } else {
+        setFlairFeedback({
+          type: 'error',
+          message: 'Failed to update flair. Please try again.',
+        });
+      }
+    } finally {
+      setIsUpdatingFlair(false);
+    }
+  }, [data, window]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -89,6 +130,26 @@ export const LeaderboardScreen = () => {
                 #{data.currentUser.rank} • {data.currentUser.username} —{' '}
                 {formatLeaderboardScore(data.currentUser.score)} points
               </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <button
+                  className="btn-base btn-primary px-3 py-2 text-sm"
+                  onClick={() => {
+                    void handleSetFlair();
+                  }}
+                  disabled={isUpdatingFlair}
+                >
+                  {isUpdatingFlair ? 'Updating flair…' : 'Set flair to rank'}
+                </button>
+                {flairFeedback && (
+                  <div
+                    className={`rounded px-3 py-2 text-xs ${
+                      flairFeedback.type === 'success' ? 'feedback-success' : 'feedback-error'
+                    }`}
+                  >
+                    {flairFeedback.message}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

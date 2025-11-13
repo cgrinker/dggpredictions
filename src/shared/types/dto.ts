@@ -195,6 +195,16 @@ export interface LeaderboardResponse {
   readonly currentUser?: LeaderboardEntry;
 }
 
+export interface SetLeaderboardFlairRequest {
+  readonly window?: 'weekly' | 'monthly' | 'alltime';
+}
+
+export interface SetLeaderboardFlairResponse {
+  readonly flairText: string;
+  readonly window: 'weekly' | 'monthly' | 'alltime';
+  readonly rank: number;
+}
+
 export interface ApiSuccessEnvelope<T> {
   readonly data: T;
   readonly meta?: Record<string, unknown>;
@@ -215,6 +225,7 @@ export type MarketBetHistoryResponseEnvelope = ApiSuccessEnvelope<MarketBetHisto
 export type WalletResponse = ApiSuccessEnvelope<WalletSnapshot>;
 export type UserBetsResponse = ApiSuccessEnvelope<PaginatedResponse<BetSummary>>;
 export type LeaderboardResponseEnvelope = ApiSuccessEnvelope<LeaderboardResponse>;
+export type SetLeaderboardFlairResponseEnvelope = ApiSuccessEnvelope<SetLeaderboardFlairResponse>;
 export type ArchiveMarketsResponseEnvelope = ApiSuccessEnvelope<ArchiveMarketsResponse>;
 export type ConfigResponseEnvelope = ApiSuccessEnvelope<ConfigState>;
 export type ResolveMarketResponseEnvelope = ApiSuccessEnvelope<Market> & {

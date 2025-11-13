@@ -1,4 +1,10 @@
-import type { LeaderboardResponse, LeaderboardResponseEnvelope } from '../../shared/types/dto.js';
+import type {
+  LeaderboardResponse,
+  LeaderboardResponseEnvelope,
+  SetLeaderboardFlairRequest,
+  SetLeaderboardFlairResponse,
+  SetLeaderboardFlairResponseEnvelope,
+} from '../../shared/types/dto.js';
 import { apiFetch } from './client.js';
 
 type LeaderboardWindow = LeaderboardResponse['window'];
@@ -29,5 +35,19 @@ export const getLeaderboard = async (
   });
 
   const envelope = await apiFetch<LeaderboardResponseEnvelope>(`/api/leaderboard${query}`);
+  return envelope.data;
+};
+
+export const setLeaderboardFlair = async (
+  payload: SetLeaderboardFlairRequest = {},
+): Promise<SetLeaderboardFlairResponse> => {
+  const envelope = await apiFetch<SetLeaderboardFlairResponseEnvelope>(
+    '/api/leaderboard/flair',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+
   return envelope.data;
 };

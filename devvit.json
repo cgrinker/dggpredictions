@@ -16,6 +16,9 @@
   "media": {
     "dir": "assets"
   },
+  "permissions": {
+    "reddit": true
+  },
   "menu": {
     "items": [
       {

@@ -220,6 +220,20 @@ export const LeaderboardResponseSchema = z
   })
   .strict();
 
+export const SetLeaderboardFlairRequestSchema = z
+  .object({
+    window: z.enum(['weekly', 'monthly', 'alltime']).optional(),
+  })
+  .strict();
+
+export const SetLeaderboardFlairResponseSchema = z
+  .object({
+    flairText: z.string().min(1).max(64),
+    window: z.enum(['weekly', 'monthly', 'alltime']),
+    rank: z.number().int().min(1),
+  })
+  .strict();
+
 export const AuditLogResponseSchema = z
   .object({
     actions: z.array(ModeratorActionSchema).readonly(),

@@ -1,5 +1,6 @@
+import { reddit } from '@devvit/web/server';
 import type { LeaderboardEntry } from '../../shared/types/entities.js';
-import type { LeaderboardResponse } from '../../shared/types/dto.js';
+import type { LeaderboardResponse, SetLeaderboardFlairResponse } from '../../shared/types/dto.js';
 import type { LeaderboardWindow } from '../config/constants.js';
 import type { SubredditId, UserId } from '../../shared/types/entities.js';
 import { DEFAULT_LEADERBOARD_WINDOWS } from '../config/constants.js';
@@ -8,6 +9,7 @@ import { ConfigService } from './config.service.js';
 import { ValidationError } from '../errors.js';
 import { nowIso } from '../utils/time.js';
 import { UserDirectoryService } from './user-directory.service.js';
+import { logger } from '../logging.js';
 
 const MAX_ENTRIES = 100;
 
@@ -63,6 +65,66 @@ export class LeaderboardService {
     };
 
     return response;
+  }
+
+  async setUserRankFlair(
+    subredditId: SubredditId,
+    subredditName: string,
+    user: { readonly id: UserId | null; readonly username: string | null },
+    options?: LeaderboardOptions,
+  ): Promise<SetLeaderboardFlairResponse> {
+    if (!user.id) {
+      throw new ValidationError('You must be signed in to update your flair.');
+    }
+
+    if (!user.username) {
+      throw new ValidationError('A valid username is required to update flair.');
+    }
+
+    const config = await this.config.getConfig(subredditId);
+    if (!config.featureFlags.enableLeaderboard) {
+      throw new ValidationError('Leaderboard feature is disabled for this subreddit.');
+    }
+
+    const window = this.resolveWindow(options?.window ?? config.leaderboardWindow);
+    const entry = await this.leaderboards.getUser(subredditId, window, user.id);
+    if (!entry) {
+      throw new ValidationError('You need a leaderboard rank before updating flair.');
+    }
+
+    const overrides = this.buildOverrideMap(user.id, user.username);
+    const [enriched] = await this.enrichEntries(subredditId, [entry], overrides);
+    if (!enriched) {
+      throw new ValidationError('Unable to resolve your leaderboard entry.');
+    }
+    const flairText = `DGG Predict Rank: ${enriched.rank}`;
+
+    try {
+      await reddit.setUserFlair({
+        subredditName,
+        username: user.username,
+        text: flairText,
+      });
+    } catch (error) {
+      logger.error('failed to set user flair', {
+        subredditId,
+        subredditName,
+        userId: user.id,
+        username: user.username,
+        window,
+        message: error instanceof Error ? error.message : 'unknown error',
+      });
+
+      throw new ValidationError('Unable to update flair right now. Please try again later.', {
+        cause: error,
+      });
+    }
+
+    return {
+      flairText,
+      window,
+      rank: enriched.rank,
+    } satisfies SetLeaderboardFlairResponse;
   }
 
   private buildOverrideMap(
