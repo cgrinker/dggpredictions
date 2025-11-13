@@ -1,5 +1,8 @@
 ## dggpredictions
 
+* Source Code Available [Here](https://github.com/cgrinker/dggpredictions)
+
+
 This is a **play money** prediction market intended for use on the /r/destiny subreddit. As a politics subreddit /r/destiny users make strong predictions, some might even say *hot takes* about political predictions. This app offers and opportunity for redditers to put their (fake) money where their mouth is.
 
 ## The UX Flow Of The App Is as follows:
@@ -23,7 +26,9 @@ const payout = Math.max(wager, Math.floor(raw));
 
 
 ## Data usage and privacy
-* This app makes uses of the Redis storage (for app state) and the reddit CDN for storing splash images for the markets. Currently no information about users is stored outside of Reddit. We've run some rough calculations about data usage:
+
+### Storage
+This app makes uses of the Redis storage (for app state) and the reddit CDN for storing splash images for the markets. Currently no information about users is stored outside of Reddit. We've run some rough calculations about data usage:
 
 | Data slice | Per-item footprint | Example volume | Approx usage | Notes |
 | - | - | - | - | - |
@@ -34,4 +39,17 @@ const payout = Math.max(wager, Math.floor(raw));
 | Moderator audit log | ≈0.45 KB | 2 000 actions retained | ≈0.9 MB | Payload dominates; trim list to reclaim space |
 | Config, metrics, misc. | — | — | ≈1.5 MB | Cached settings, reset bookkeeping, incident feed, safety headroom |
 
+In order to avoid a sitation where we run out of storage we calculate storage usage in src/server/services/operations.service.ts and implement a high water mark (~70%). This allows us to stop creating new markets, archive and export the ledger, and perform other cleanup operations to ensure the app can keep running in our 50MB of redis storage.
 
+In the future if usage gets high we may need to move settled bets to an external service, likely a cloudflare worker. In that future case we would minimize the information stored externally, mainly the user_id with usernames anonymized.
+
+
+## Stored User Information and API access
+* We store the following information about users in Redis: userID, username. This information is pulled into the app the first time a user launches.
+* Outside of devvit features for nodejs apps we make use of the Reddit API to set user flairs on the subreddit.
+
+
+## Testing and App approval
+In the development subreddit we have tested Market creation, bet placement, and market resolution for a small number of users. Feedback was soliciated from our mod team and a small number of test users. We are seeking approval to load test the app on the main subreddit. Currently there is no plan to make the app available for other subreddits. Subject to significant interest we would be willing to improve the app for general subreddits.
+
+No real money is used in this app. No prizes will be given to users participating. All markets will be items that can be third party verified.  Our moderator tools support dispute resolution and point refunds if markets are contested. Moderator tools support adding points to accounts if they run out of points. No endorsement of gambling or real money prediction markets are implied. This is internet points for bragging rights.
